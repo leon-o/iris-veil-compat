@@ -7,9 +7,11 @@
 Allow mods using the Veil rendering engine (such as **Create: Aeronautics**) to render correctly when using Iris shaderpacks.
 
 # Principle
-[Create: Aeronautics](https://github.com/Create-Modern/Create-Aeronautics) uses the **Veil** rendering engine for its visual effects — airplane wings, glass panels, contrails, and more. Normally, when you enable a shaderpack via Iris, these Veil-rendered visuals bypass the shaderpack's pipeline entirely, causing them to appear broken or missing.
+[Veil](https://github.com/FoundryMC/Veil) is an advanced rendering SDK for Minecraft mods — it provides a shader infrastructure that other mods can build on. The most prominent consumer is [Create: Aeronautics](https://github.com/Creators-of-Aeronautics/Simulated-Project), which uses Veil for its airplane wings, glass panels, contrails, and other visual effects.
 
-This mod automatically merges Veil shader code into the shaderpack's gbuffer programs at runtime, so Aeronautics planes and other Veil-based visuals integrate with your shaderpack.
+The problem: when you enable a shaderpack via Iris, Veil-rendered visuals bypass the shaderpack's pipeline entirely, causing them to appear broken or missing.
+
+This mod automatically merges Veil shader code into the shaderpack's gbuffer programs at runtime, so Veil-based visuals (like Aeronautics planes) integrate seamlessly with your shaderpack.
 
 # Implementation details
 
@@ -20,7 +22,8 @@ The cache is automatically invalidated when you switch or reload shaderpacks —
 # Compatibility
 - **Iris** 1.8.1+ (required)
 - **Sodium**
-- **Veil(Create: Aeronautics)**
+- **Veil** 4.0.0+
+- Tested with **Create: Aeronautics** (Spring, Laser) and **Sable**
 
 # Credit
 This project uses [glsl-transformer](https://github.com/IrisShaders/glsl-transformer) for shader AST manipulation.
