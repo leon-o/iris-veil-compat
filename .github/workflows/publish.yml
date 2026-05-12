@@ -167,26 +167,25 @@ jobs:
           fail-mode: warn
 
       # --- Publish: Modrinth ---
-      # TODO: Replace <modrinth-id> with the actual Modrinth project ID when available.
-      # - name: Publish to Modrinth
-      #   uses: Kir-Antipov/mc-publish@v3.3
-      #   with:
-      #     modrinth-id: <modrinth-id>
-      #     modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-      #     name: "NeoForge ${{ steps.version.outputs.mc_version }}+${{ steps.version.outputs.mod_version }}-${{ steps.version.outputs.version_type }}"
-      #     version: "${{ steps.version.outputs.mc_version }}+${{ steps.version.outputs.mod_version }}-${{ steps.version.outputs.version_type }}"
-      #     changelog: ${{ steps.changelog.outputs.content }}
-      #     files: ${{ steps.artifact.outputs.jar_path }}
-      #     version-type: ${{ steps.version.outputs.version_type }}
-      #     java: |
-      #       Java 21
-      #     loaders: |
-      #       neoforge
-      #     game-versions: |
-      #       ${{ steps.version.outputs.mc_version }}
-      #     dependencies: |
-      #       IrisShader(required){modrinth:iris}
-      #     fail-mode: warn
+      - name: Publish to Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: iris-veil-compat
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          name: "NeoForge ${{ steps.version.outputs.mc_version }}+${{ steps.version.outputs.mod_version }}-${{ steps.version.outputs.version_type }}"
+          version: "${{ steps.version.outputs.mc_version }}+${{ steps.version.outputs.mod_version }}-${{ steps.version.outputs.version_type }}"
+          changelog: ${{ steps.changelog.outputs.content }}
+          files: ${{ steps.artifact.outputs.jar_path }}
+          version-type: ${{ steps.version.outputs.version_type }}
+          java: |
+            Java 21
+          loaders: |
+            neoforge
+          game-versions: |
+            ${{ steps.version.outputs.mc_version }}
+          dependencies: |
+            IrisShader(required){modrinth:iris}
+          fail-mode: warn
 
       # --- Publish: CurseForge ---
       # TODO: Replace <curseforge-id> with the actual CurseForge project ID when available.
