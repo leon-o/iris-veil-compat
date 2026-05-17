@@ -2,7 +2,9 @@ package top.leonx.irisveil.compat.veil;
 
 import io.github.douira.glsl_transformer.ast.node.TranslationUnit;
 import io.github.douira.glsl_transformer.ast.node.Version;
+import io.github.douira.glsl_transformer.ast.node.declaration.TypeAndInitDeclaration;
 import io.github.douira.glsl_transformer.ast.node.external_declaration.FunctionDefinition;
+import io.github.douira.glsl_transformer.ast.node.external_declaration.DeclarationExternalDeclaration;
 import io.github.douira.glsl_transformer.ast.node.expression.Expression;
 import io.github.douira.glsl_transformer.ast.node.expression.unary.FunctionCallExpression;
 import io.github.douira.glsl_transformer.ast.print.ASTPrinter;
@@ -10,11 +12,15 @@ import io.github.douira.glsl_transformer.ast.query.Root;
 import io.github.douira.glsl_transformer.ast.query.RootSupplier;
 import io.github.douira.glsl_transformer.ast.transform.JobParameters;
 import io.github.douira.glsl_transformer.ast.transform.SingleASTTransformer;
+import io.github.douira.glsl_transformer.ast.node.type.qualifier.StorageQualifier;
+import io.github.douira.glsl_transformer.ast.node.type.qualifier.StorageQualifier.StorageType;
 import net.irisshaders.iris.helpers.StringPair;
 import net.irisshaders.iris.shaderpack.preprocessor.JcppProcessor;
 import top.leonx.irisveil.IrisVeilCompat;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,16 +48,6 @@ public class GlslTransformerVeilFragmentPatcher {
     private static final Pattern VERSION_PATTERN =
         Pattern.compile("^.*#version\\s+(\\d+)(\\s+\\w+)?", Pattern.DOTALL);
 
-    private static final Set<String> VEIL_RENAME = Set.of(
-        "linear_fog", "linear_fog_fade", "fog_distance",
-        "vertexDistance", "lengthData", "vertexColor", "vertexLight",
-        "lightMapColor", "overlayColor", "texCoord0",
-        "time", "normal", "fragColor",
-        "toGamma", "toLinear", "linearToLogC", "logCToLinear",
-        "rgbToHsv", "hsvToRgb", "rgb2hsv", "hsv2rgb",
-        "luminance", "acesToneMapping", "reverseAces"
-    );
-
     private static final Set<String> BASE_TEXTURE_SAMPLERS = Set.of(
         "gtexture", "texture", "tex", "iris_Texture"
     );
@@ -62,6 +58,10 @@ public class GlslTransformerVeilFragmentPatcher {
     );
 
     private final SingleASTTransformer<FragmentPatchParams> transformer;
+    @SuppressWarnings("rawtypes")
+    private final SingleASTTransformer veilTransformer;
+    @SuppressWarnings("rawtypes")
+    private final SingleASTTransformer irisDeclarationTransformer;
 
     public GlslTransformerVeilFragmentPatcher() {
         transformer = new SingleASTTransformer<>() {
@@ -86,6 +86,14 @@ public class GlslTransformerVeilFragmentPatcher {
             }
         };
         transformer.setTransformation(this::transformShaderpackFragment);
+
+        veilTransformer = new SingleASTTransformer();
+        veilTransformer.setRootSupplier(RootSupplier.PREFIX_UNORDERED_ED_EXACT);
+        veilTransformer.getLexer().version = Version.GLSL40;
+
+        irisDeclarationTransformer = new SingleASTTransformer();
+        irisDeclarationTransformer.setRootSupplier(RootSupplier.PREFIX_UNORDERED_ED_EXACT);
+        irisDeclarationTransformer.getLexer().version = Version.GLSL40;
     }
 
     public String patch(String irisFragmentSource, String veilFragmentSource, boolean useDithering) {
@@ -97,9 +105,15 @@ public class GlslTransformerVeilFragmentPatcher {
             String veilSource = JcppProcessor.glslPreprocessSource(veilFragmentSource,
                 List.of(new StringPair("VEIL_FRAGMENT", "1")));
             String baseSampler = detectBaseSampler(irisFragmentSource);
-            String veilBridge = buildVeilBridge(veilSource, baseSampler);
             String patchedIris = transformer.transform(irisFragmentSource, new FragmentPatchParams(useDithering));
             patchedIris = forceCompatibilityVersion(patchedIris);
+            Set<String> irisGlobalNames = extractGlobalDeclarationNames(irisDeclarationTransformer, patchedIris);
+            if (VEIL_TIME_UNIFORM.matcher(veilSource).find() && !irisGlobalNames.contains("frameTimeCounter")) {
+                patchedIris = injectAfterPreamble(patchedIris, "\nuniform float frameTimeCounter;\n");
+                irisGlobalNames.add("frameTimeCounter");
+            }
+            String veilBridge = buildVeilBridge(veilSource, baseSampler, veilTransformer,
+                irisGlobalNames);
             patchedIris = injectAfterPreamble(patchedIris, "\nvec4 _veil_fragColor;\n");
             patchedIris = injectBeforeMain(patchedIris, veilBridge);
             patchedIris = injectVeilMainCall(patchedIris);
@@ -146,14 +160,25 @@ public class GlslTransformerVeilFragmentPatcher {
         return BASE_TEXTURE_SAMPLERS.contains(sampler);
     }
 
-    private static String buildVeilBridge(String source, String baseSampler) {
+    @SuppressWarnings("unchecked")
+    private static String buildVeilBridge(String source, String baseSampler,
+                                          SingleASTTransformer veilTransformer,
+                                          Set<String> irisUniformNames) {
         boolean hasTimeUniform = VEIL_TIME_UNIFORM.matcher(source).find();
-        String result = VERSION_LINE.matcher(source).replaceAll("");
-        result = removeMappedUniformDeclarations(result);
+        TranslationUnit veilTree = veilTransformer.parseSeparateTranslationUnit(source);
+        Root veilRoot = veilTree.getRoot();
 
-        for (String name : VEIL_RENAME) {
-            result = result.replaceAll("\\b" + Pattern.quote(name) + "\\b", "_veil_" + name);
+        for (String name : extractVeilGlobalNames(veilTree)) {
+            veilRoot.rename(name, "_veil_" + name);
         }
+        if (hasTimeUniform) {
+            veilRoot.rename("time", "_veil_time");
+        }
+
+        String result = VERSION_LINE.matcher(ASTPrinter.printSimple(veilTree)).replaceAll("");
+        result = removeMappedUniformDeclarations(result);
+        result = removeDuplicateUniformDeclarations(result, irisUniformNames);
+
         for (var entry : VEIL_TO_IRIS.entrySet()) {
             result = result.replaceAll("\\b" + Pattern.quote(entry.getKey()) + "\\b",
                 Matcher.quoteReplacement(entry.getValue()));
@@ -169,6 +194,48 @@ public class GlslTransformerVeilFragmentPatcher {
                 "void _veil_fragment_main() { _veil_time = frameTimeCounter;");
         }
         return "\n// IrisVeilCompat: Veil fragment bridge\n" + result + "\n";
+    }
+
+    private static Set<String> extractVeilGlobalNames(TranslationUnit veilTree) {
+        Set<String> names = new LinkedHashSet<>();
+        for (var child : veilTree.getChildren()) {
+            if (child instanceof FunctionDefinition functionDefinition) {
+                String name = functionDefinition.getFunctionPrototype().getName().getName();
+                if (!"main".equals(name) && shouldRenameVeilGlobal(name)) {
+                    names.add(name);
+                }
+                continue;
+            }
+            if (child instanceof DeclarationExternalDeclaration declarationExternalDeclaration
+                && declarationExternalDeclaration.getDeclaration() instanceof TypeAndInitDeclaration declaration) {
+                if (hasStorageQualifier(declaration, StorageType.UNIFORM)) {
+                    continue;
+                }
+                declaration.getMembers().stream()
+                    .map(member -> member.getName().getName())
+                    .filter(GlslTransformerVeilFragmentPatcher::shouldRenameVeilGlobal)
+                    .forEach(names::add);
+            }
+        }
+        return names;
+    }
+
+    private static boolean shouldRenameVeilGlobal(String name) {
+        return !name.startsWith("gl_")
+            && !name.startsWith("iris_")
+            && !name.startsWith("_veil_");
+    }
+
+    private static boolean hasStorageQualifier(TypeAndInitDeclaration declaration, StorageType... storageTypes) {
+        var typeQualifier = declaration.getType().getTypeQualifier();
+        if (typeQualifier == null) {
+            return false;
+        }
+
+        return typeQualifier.getParts().stream()
+            .filter(StorageQualifier.class::isInstance)
+            .map(StorageQualifier.class::cast)
+            .anyMatch(qualifier -> Arrays.asList(storageTypes).contains(qualifier.storageType));
     }
 
     private static final Map<String, String> VEIL_TO_IRIS = Map.of(
@@ -194,6 +261,31 @@ public class GlslTransformerVeilFragmentPatcher {
         }
         result = result.replaceAll("(?m)^\\s*uniform\\s+\\w+\\s+Sampler0\\s*;\\s*\\R?", "");
         result = result.replaceAll("(?m)^\\s*uniform\\s+\\w+\\s+TextureSheet\\s*;\\s*\\R?", "");
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> extractGlobalDeclarationNames(SingleASTTransformer transformer, String source) {
+        Set<String> names = new LinkedHashSet<>();
+        TranslationUnit tree = transformer.parseSeparateTranslationUnit(source);
+        for (var child : tree.getChildren()) {
+            if (child instanceof DeclarationExternalDeclaration declarationExternalDeclaration
+                && declarationExternalDeclaration.getDeclaration() instanceof TypeAndInitDeclaration declaration) {
+                declaration.getMembers().stream()
+                    .map(member -> member.getName().getName())
+                    .forEach(names::add);
+            }
+        }
+        return names;
+    }
+
+    private static String removeDuplicateUniformDeclarations(String veilCode, Set<String> irisGlobalNames) {
+        String result = veilCode;
+        for (String name : irisGlobalNames) {
+            result = result.replaceAll(
+                "(?m)^\\s*uniform\\s+\\w+\\s+" + Pattern.quote(name)
+                    + "\\s*(?:\\[[^]]*])?\\s*;\\s*\\R?", "");
+        }
         return result;
     }
 
