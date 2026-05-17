@@ -208,9 +208,14 @@ public class IrisVeilProgramLinker {
                 sourceAccessor.getBlendModeOverride()
             ).withDirectiveOverride(source.getDirectives());
 
-            // 11. Set alpha test override
-            ((ProgramDirectivesAccessor) veilProgramSource.getDirectives())
-                .irisveil$setAlphaTestOverride(alphaTest);
+            // 11. Set alpha test override.
+            // Skip for shadow — the shaderpack's own Shadow program directives
+            // already carry the correct alpha test (e.g. alpha discard for
+            // semi-transparent blocks). Overriding to ALWAYS would disable it.
+            if (!isShadow) {
+                ((ProgramDirectivesAccessor) veilProgramSource.getDirectives())
+                    .irisveil$setAlphaTestOverride(alphaTest);
+            }
 
             // 12. Create Iris ShaderInstance — use createShadowShader for shadow
             // passes so the program writes to the shadow map FBO rather than the gbuffer.
