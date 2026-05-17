@@ -1,9 +1,13 @@
 package top.leonx.irisveil.compat.veil.mixin;
 
+import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import foundry.veil.impl.client.render.pipeline.ShaderProgramShard;
+import net.irisshaders.iris.shadows.ShadowRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
+import top.leonx.irisveil.compat.veil.RenderStateManager;
 
 /**
  * Intercepts {@link ShaderProgramShard#setupRenderState()} at runtime.
@@ -28,6 +33,9 @@ public class MixinShaderProgramShard {
     private volatile ShaderInstance irisveil$cachedIrisShader;
 
     @Unique
+    private volatile boolean irisveil$cachedIsShadow;
+
+    @Unique
     private volatile int irisveil$lastShaderPackGen = -1;
 
     @Inject(method = "setupRenderState", at = @At("TAIL"))
@@ -43,6 +51,13 @@ public class MixinShaderProgramShard {
             if (irisShader != null) {
                 irisShader.apply();
                 RenderSystem.setShader(() -> irisShader); // register in RenderSystem so draw uses Iris shader
+
+                // During the shadow pass, irisShader.apply() uploads gbuffer
+                // matrices by default.  Override with the shadow-specific
+                // projection / model-view so the shader writes correct depth.
+                if (RenderStateManager.isRenderingShadow()) {
+                    irisveil$setShadowMatrices(irisShader);
+                }
             }
         } catch (Exception e) {
             IrisVeilCompat.LOGGER.warn(
@@ -52,21 +67,51 @@ public class MixinShaderProgramShard {
         }
     }
 
+    /**
+     * Sets {@code iris_ProjMat}, {@code iris_ModelViewMat}, and
+     * {@code iris_NormalMat} on the given shader to the shadow pass
+     * matrices tracked by {@link ShadowRenderer}.
+     */
+    @Unique
+    private static void irisveil$setShadowMatrices(ShaderInstance shader) {
+        Uniform projUniform = shader.getUniform("iris_ProjMat");
+        if (projUniform != null) {
+            projUniform.set(ShadowRenderer.PROJECTION);
+        }
+
+        Uniform modelViewUniform = shader.getUniform("iris_ModelViewMat");
+        if (modelViewUniform != null) {
+            modelViewUniform.set(ShadowRenderer.MODELVIEW);
+        }
+
+        Uniform normalUniform = shader.getUniform("iris_NormalMat");
+        if (normalUniform != null) {
+            Matrix4f normalMatrix = new Matrix4f(ShadowRenderer.MODELVIEW);
+            normalMatrix.invert();
+            normalMatrix.transpose();
+            normalUniform.set(new Matrix3f(normalMatrix));
+        }
+    }
+
     @Unique
     private ShaderInstance irisveil$getOrCreateIrisShader(ResourceLocation shaderPath) {
         int currentGen = IrisVeilShaderCache.getShaderPackGeneration();
-        // Shaderpack changed → invalidate both cached result and gen tracker
-        if (irisveil$lastShaderPackGen != currentGen) {
+        boolean isShadow = RenderStateManager.isRenderingShadow();
+
+        // Shaderpack changed OR render pass changed (shadow ↔ non-shadow)
+        // → invalidate local cache so the correct program is created.
+        if (irisveil$lastShaderPackGen != currentGen || irisveil$cachedIsShadow != isShadow) {
             irisveil$cachedIrisShader = null;
         }
 
-        // Use cached result only if valid (non-null) and generation matches
+        // Use cached result only if valid (non-null) and state matches
         if (irisveil$cachedIrisShader != null && irisveil$lastShaderPackGen == currentGen) {
             return irisveil$cachedIrisShader;
         }
 
         irisveil$cachedIrisShader = IrisVeilShaderCache.getOrCreate(shaderPath);
         irisveil$lastShaderPackGen = currentGen;
+        irisveil$cachedIsShadow = isShadow;
         return irisveil$cachedIrisShader;
     }
 }

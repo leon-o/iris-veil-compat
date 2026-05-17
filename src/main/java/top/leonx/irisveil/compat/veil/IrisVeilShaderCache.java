@@ -46,6 +46,10 @@ public class IrisVeilShaderCache {
     /**
      * Gets or creates an Iris {@link ShaderInstance} for the given Veil shader path.
      *
+     * <p>When the Iris shadow pass is active (tracked by {@link RenderStateManager}),
+     * automatically uses {@link ProgramId#Shadow} so that Veil shaders write to the
+     * shadow map rather than the gbuffer.
+     *
      * @param shaderPath the Veil shader resource location (e.g. {@code simulated:spring/spring})
      * @return a new or cached Iris ShaderInstance, or {@code null} if creation failed
      */
@@ -54,6 +58,12 @@ public class IrisVeilShaderCache {
         ShaderProgram veilProgram = getVeilProgram(shaderPath);
         if (veilProgram == null || !veilProgram.isValid()) {
             return null;
+        }
+
+        // During the shadow pass, override to ProgramId.Shadow so the shader
+        // writes to the shadow map FBO rather than the gbuffer.
+        if (RenderStateManager.isRenderingShadow()) {
+            return getOrCreate(shaderPath, ProgramId.Shadow, false);
         }
 
         IrisVeilProgramLinker.Params params = LINKER.determineParams(veilProgram);

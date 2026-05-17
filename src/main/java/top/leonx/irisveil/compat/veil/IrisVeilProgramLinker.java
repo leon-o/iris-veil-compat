@@ -117,11 +117,20 @@ public class IrisVeilProgramLinker {
             // 5. Dithered translucency already encodes alpha through screen-door
             // discard. A trailing Iris alpha test would incorrectly delete low
             // alpha laser pixels after the dither pass.
-            AlphaTest alphaTest = useDithering || programId == ProgramId.EntitiesTrans
-                ? AlphaTest.ALWAYS
-                : detectAlphaTest(veilProgram);
+            // Shadow programs always use ALWAYS — alpha tests don't apply to
+            // shadow map rendering.
+            AlphaTest alphaTest;
+            if (programId == ProgramId.Shadow) {
+                alphaTest = AlphaTest.ALWAYS;
+            } else if (useDithering || programId == ProgramId.EntitiesTrans) {
+                alphaTest = AlphaTest.ALWAYS;
+            } else {
+                alphaTest = detectAlphaTest(veilProgram);
+            }
             Optional<ProgramSource> sourceOpt = resolver.resolve(programId);
-            if (programId == ProgramId.EntitiesTrans) {
+            if (programId == ProgramId.Shadow) {
+                IrisVeilCompat.LOGGER.info("IrisVeilCompat: using Shadow program for '{}'", shaderPath);
+            } else if (programId == ProgramId.EntitiesTrans) {
                 IrisVeilCompat.LOGGER.info("IrisVeilCompat: using EntitiesTrans program for translucent '{}'", shaderPath);
             } else if (useDithering) {
                 IrisVeilCompat.LOGGER.info("IrisVeilCompat: using Block program with dithering for translucent '{}'", shaderPath);
@@ -143,13 +152,25 @@ public class IrisVeilProgramLinker {
                 return null;
             }
 
-            // 8. Build shader name
-            String shaderName = "gbuffers_veil_" + shaderPath.getNamespace() + "_" +
-                shaderPath.getPath().replace('/', '_');
+            // 8. Build shader name (shadow programs use a distinct prefix so Iris
+            // tracks them separately from gbuffer programs)
+            boolean isShadow = programId == ProgramId.Shadow;
+            String shaderName = (isShadow ? "shadow_veil_" : "gbuffers_veil_") +
+                shaderPath.getNamespace() + "_" + shaderPath.getPath().replace('/', '_');
 
-            // 9. Patch Iris vertex shader for Veil format
-            String patchedVertSource = patcher.patch(irisVertSource, veilVertSource, format, shaderName);
-            irisFragSource = fragmentPatcher.patch(irisFragSource, veilFragSource, useDithering);
+            // 9. Patch Iris vertex shader for Veil format.
+            // Shadow shaders are left unpatched — they only need depth output
+            // and the Veil gbuffer injection (modelVertex routing, gl_Color
+            // replacement, extension attribute removal) produces type mismatches
+            // (e.g. vec4→vec3) against the simpler shadow shader structure.
+            String patchedVertSource;
+            if (isShadow) {
+                patchedVertSource = irisVertSource;
+                // irisFragSource already holds the shadow fragment source
+            } else {
+                patchedVertSource = patcher.patch(irisVertSource, veilVertSource, format, shaderName);
+                irisFragSource = fragmentPatcher.patch(irisFragSource, veilFragSource, useDithering);
+            }
 
             // 10. Apply dithering after Veil patching so the alpha varying is
             // not re-parsed and stripped by the main Veil transformer.
@@ -191,16 +212,29 @@ public class IrisVeilProgramLinker {
             ((ProgramDirectivesAccessor) veilProgramSource.getDirectives())
                 .irisveil$setAlphaTestOverride(alphaTest);
 
-            // 12. Create Iris ShaderInstance
-            ShaderInstance shader = irisPipeline.invokeCreateShader(
-                shaderName,
-                veilProgramSource,
-                programId,
-                alphaTest,
-                format,
-                FogMode.OFF,
-                false, false, false, false, false
-            );
+            // 12. Create Iris ShaderInstance — use createShadowShader for shadow
+            // passes so the program writes to the shadow map FBO rather than the gbuffer.
+            ShaderInstance shader;
+            if (isShadow) {
+                shader = irisPipeline.invokeCreateShadowShader(
+                    shaderName,
+                    veilProgramSource,
+                    programId,
+                    alphaTest,
+                    format,
+                    false, false, false, false
+                );
+            } else {
+                shader = irisPipeline.invokeCreateShader(
+                    shaderName,
+                    veilProgramSource,
+                    programId,
+                    alphaTest,
+                    format,
+                    FogMode.OFF,
+                    false, false, false, false, false
+                );
+            }
 
             IrisVeilCompat.LOGGER.info("IrisVeilCompat: created Iris ShaderInstance for '{}'", shaderPath);
             return shader;
