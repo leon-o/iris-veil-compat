@@ -307,9 +307,6 @@ public class IrisVeilProgramLinker {
             // 1. Check if processed source is cached (from MixinDirectShaderCompiler hook)
             String cached = IrisVeilShaderCache.getProcessedVertexSource(vertexId);
             if (cached != null && !cached.isEmpty()) {
-                boolean hasGetVelocity = cached.contains("getVelocity");
-                IrisVeilCompat.LOGGER.info("IrisVeilCompat: using cached processed source for '{}' ({} chars, hasGetVelocity={})",
-                    veilProgram.getName(), cached.length(), hasGetVelocity);
                 return cached;
             }
 
@@ -348,8 +345,6 @@ public class IrisVeilProgramLinker {
 
             String cached = IrisVeilShaderCache.getProcessedFragmentSource(fragmentId);
             if (cached != null && !cached.isEmpty()) {
-                IrisVeilCompat.LOGGER.info("IrisVeilCompat: using cached processed fragment source for '{}' ({} chars)",
-                    veilProgram.getName(), cached.length());
                 return cached;
             }
 
@@ -476,7 +471,6 @@ public class IrisVeilProgramLinker {
                     blendMode.dstAlphaFactor() == com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA ||
                     blendMode.dstAlphaFactor() == com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE_MINUS_CONSTANT_ALPHA;
                 if (hasAlphaFactor) {
-                    IrisVeilCompat.LOGGER.debug("IrisVeilCompat: translucent due to Veil blend mode alpha factors");
                     return true;
                 }
             }
@@ -485,7 +479,6 @@ public class IrisVeilProgramLinker {
         // 2. Secondary: parse vertex source for alpha patterns
         if (veilVertSource != null && !veilVertSource.isEmpty()) {
             if (veilVertSource.contains("vertexColor.a") || veilVertSource.contains("gl_Color.a")) {
-                IrisVeilCompat.LOGGER.debug("IrisVeilCompat: translucent due to vertex color alpha reference");
                 return true;
             }
 
@@ -507,7 +500,6 @@ public class IrisVeilProgramLinker {
 
                 String expr = veilVertSource.substring(eq + 1, semi).trim();
                 if (expr.contains("0.") && !expr.contains("1.0")) {
-                    IrisVeilCompat.LOGGER.debug("IrisVeilCompat: translucent due to alpha assignment < 1.0");
                     return true;
                 }
 
@@ -524,7 +516,6 @@ public class IrisVeilProgramLinker {
                     if (semi == -1) semi = veilVertSource.length();
                     String stmt = veilVertSource.substring(mixIdx, semi);
                     if (stmt.contains(".a") || stmt.contains(".w")) {
-                        IrisVeilCompat.LOGGER.debug("IrisVeilCompat: translucent due to mix/smoothstep affecting alpha");
                         return true;
                     }
                     mixIdx = veilVertSource.indexOf("mix(", semi);
@@ -543,7 +534,6 @@ public class IrisVeilProgramLinker {
                 compact.contains("fragColor=color*") ||
                 compact.contains("fragColor=linear_fog") ||
                 compact.contains("fragColor=vec4(")) {
-                IrisVeilCompat.LOGGER.debug("IrisVeilCompat: translucent due to fragment alpha/color output");
                 return true;
             }
         }
@@ -555,12 +545,10 @@ public class IrisVeilProgramLinker {
             if (lowerPath.contains("translucent") || lowerPath.contains("glass") ||
                 lowerPath.contains("alpha") || lowerPath.contains("trans") ||
                 lowerPath.contains("laser")) {
-                IrisVeilCompat.LOGGER.debug("IrisVeilCompat: translucent due to shader path keyword");
                 return true;
             }
         }
 
-        IrisVeilCompat.LOGGER.debug("IrisVeilCompat: no translucency detected");
         return false;
     }
 

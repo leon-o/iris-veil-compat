@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentMap;
 public class IrisVeilShaderCache {
 
     private static final ConcurrentMap<String, ShaderInstance> CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, IrisVeilProgramLinker.Params> PARAM_CACHE = new ConcurrentHashMap<>();
     /** Cache of Veil-processed vertex shader source (populated by MixinDirectShaderCompiler). */
     private static final ConcurrentMap<ResourceLocation, String> PROCESSED_VERTEX_SOURCES = new ConcurrentHashMap<>();
     /** Cache of Veil-processed fragment shader source (populated by MixinDirectShaderCompiler). */
@@ -66,9 +67,14 @@ public class IrisVeilShaderCache {
             return getOrCreate(shaderPath, ProgramId.Shadow, false);
         }
 
-        IrisVeilProgramLinker.Params params = LINKER.determineParams(veilProgram);
+        String paramsKey = shaderPackFingerprint() + ":" + shaderPath + ":params";
+        IrisVeilProgramLinker.Params params = PARAM_CACHE.get(paramsKey);
         if (params == null) {
-            return null;
+            params = LINKER.determineParams(veilProgram);
+            if (params == null) {
+                return null;
+            }
+            PARAM_CACHE.put(paramsKey, params);
         }
 
         return getOrCreate(shaderPath, params.programId(), params.useDithering());
@@ -106,6 +112,7 @@ public class IrisVeilShaderCache {
      */
     public static void onShaderPackReload() {
         shaderPackGeneration++;
+        PARAM_CACHE.clear();
         // Old entries will be superseded by new fingerprint on next getOrCreate().
         IrisVeilCompat.LOGGER.debug("IrisVeilShaderCache: shaderpack reloaded (gen {})", shaderPackGeneration);
     }
@@ -154,6 +161,7 @@ public class IrisVeilShaderCache {
             }
         });
         CACHE.clear();
+        PARAM_CACHE.clear();
         PROCESSED_VERTEX_SOURCES.clear();
         PROCESSED_FRAGMENT_SOURCES.clear();
         shaderPackGeneration = 0;
