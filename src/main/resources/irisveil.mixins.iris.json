@@ -6,7 +6,8 @@
   "client": [
     "MixinIrisRenderingPipeline",
     "MixinProgramSource",
-    "MixinProgramDirectives"
+    "MixinProgramDirectives",
+    "MixinShadowRenderer"
   ],
   "injectors": {
     "defaultRequire": 1
