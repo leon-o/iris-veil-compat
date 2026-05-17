@@ -16,4 +16,8 @@ public interface IrisRenderingPipelineAccessor {
     ShaderInstance invokeCreateShader(String name, ProgramSource source, ProgramId programId, AlphaTest fallbackAlpha,
                                       VertexFormat vertexFormat, FogMode fogMode,
                                       boolean isIntensity, boolean isFullbright, boolean isGlint, boolean isText, boolean isIE) throws IOException;
+
+    ShaderInstance invokeCreateShadowShader(String name, ProgramSource source, ProgramId programId, AlphaTest fallbackAlpha,
+                                            VertexFormat vertexFormat, boolean isIntensity, boolean isFullbright,
+                                            boolean isText, boolean isIE) throws IOException;
 }

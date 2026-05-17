@@ -51,4 +51,10 @@ public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelin
                                                     boolean isIntensity, boolean isFullbright, boolean isGlint,
                                                     boolean isText, boolean isIE) throws IOException;
 
+    @Invoker(remap = false)
+    @Override
+    public abstract ShaderInstance invokeCreateShadowShader(String name, ProgramSource source, ProgramId programId, AlphaTest fallbackAlpha,
+                                                            VertexFormat vertexFormat, boolean isIntensity, boolean isFullbright,
+                                                            boolean isText, boolean isIE) throws IOException;
+
 }
