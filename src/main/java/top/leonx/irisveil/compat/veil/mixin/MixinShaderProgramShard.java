@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 import top.leonx.irisveil.compat.veil.RenderStateManager;
+import top.leonx.irisveil.compat.veil.VeilDefaultUniforms;
 
 /**
  * Intercepts {@link ShaderProgramShard#setupRenderState()} at runtime.
@@ -50,6 +51,7 @@ public class MixinShaderProgramShard {
             ShaderInstance irisShader = irisveil$getOrCreateIrisShader(shaderPath);
             if (irisShader != null) {
                 irisShader.apply();
+                VeilDefaultUniforms.uploadBlockFaceBrightness(irisShader);
                 RenderSystem.setShader(() -> irisShader); // register in RenderSystem so draw uses Iris shader
 
                 // During the shadow pass, irisShader.apply() uploads gbuffer
