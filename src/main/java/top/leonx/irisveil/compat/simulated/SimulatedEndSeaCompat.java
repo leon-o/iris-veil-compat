@@ -1,5 +1,6 @@
 package top.leonx.irisveil.compat.simulated;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import org.jetbrains.annotations.Nullable;
 import top.leonx.irisveil.IrisVeilCompat;
 
@@ -51,6 +52,11 @@ public class SimulatedEndSeaCompat {
 
     public static int[] finalCompositeDrawBuffers() {
         return END_SEA_FINAL_COMPOSITE_DRAW_BUFFERS.clone();
+    }
+
+    public static void prepareShadowMapRenderState() {
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(true);
     }
 
     private static @Nullable Method getRenderMethod() {
