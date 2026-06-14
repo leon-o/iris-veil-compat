@@ -38,6 +38,9 @@ public class MixinShaderProgramShard {
     @Unique
     private volatile int irisveil$lastShaderPackGen = -1;
 
+    @Unique
+    private volatile int irisveil$cachedExternalRenderStateGen = -1;
+
     @Inject(method = "setupRenderState", at = @At("TAIL"))
     private void irisveil$interceptSetupRenderState(CallbackInfo ci) {
         if (!IrisVeilCompat.isShaderPackInUse()) {
@@ -97,21 +100,27 @@ public class MixinShaderProgramShard {
     private ShaderInstance irisveil$getOrCreateIrisShader(ResourceLocation shaderPath) {
         int currentGen = IrisVeilShaderCache.getShaderPackGeneration();
         boolean isShadow = RenderStateManager.isRenderingShadow();
+        int externalRenderStateGen = IrisVeilShaderCache.getExternalRenderStateGeneration();
 
         // Shaderpack changed OR render pass changed (shadow ↔ non-shadow)
-        // → invalidate local cache so the correct program is created.
-        if (irisveil$lastShaderPackGen != currentGen || irisveil$cachedIsShadow != isShadow) {
+        // OR an external render state changed → create or bypass the correct shader.
+        if (irisveil$lastShaderPackGen != currentGen
+            || irisveil$cachedIsShadow != isShadow
+            || irisveil$cachedExternalRenderStateGen != externalRenderStateGen) {
             irisveil$cachedIrisShader = null;
         }
 
         // Use cached result only if valid (non-null) and state matches
-        if (irisveil$cachedIrisShader != null && irisveil$lastShaderPackGen == currentGen) {
+        if (irisveil$cachedIrisShader != null
+            && irisveil$lastShaderPackGen == currentGen
+            && irisveil$cachedExternalRenderStateGen == externalRenderStateGen) {
             return irisveil$cachedIrisShader;
         }
 
         irisveil$cachedIrisShader = IrisVeilShaderCache.getOrCreate(shaderPath);
         irisveil$lastShaderPackGen = currentGen;
         irisveil$cachedIsShadow = isShadow;
+        irisveil$cachedExternalRenderStateGen = externalRenderStateGen;
         return irisveil$cachedIrisShader;
     }
 }

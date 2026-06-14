@@ -1,30 +1,45 @@
 package top.leonx.irisveil.mixin.iris;
 
-
+import com.google.common.collect.ImmutableSet;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.irisshaders.iris.gl.blending.AlphaTest;
+import net.irisshaders.iris.gl.framebuffer.GlFramebuffer;
 import net.irisshaders.iris.gl.state.FogMode;
 import net.irisshaders.iris.pipeline.IrisRenderingPipeline;
+import net.irisshaders.iris.targets.RenderTargets;
 import net.irisshaders.iris.shaderpack.programs.ProgramSet;
 import net.irisshaders.iris.shaderpack.programs.ProgramSource;
 import net.irisshaders.iris.shaderpack.loading.ProgramId;
 import net.minecraft.client.renderer.ShaderInstance;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.accessors.IrisRenderingPipelineAccessor;
+import top.leonx.irisveil.compat.simulated.SimulatedEndSeaCompat;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 
 import java.io.IOException;
 
 @Mixin(IrisRenderingPipeline.class)
 public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelineAccessor {
+    @Shadow(remap = false)
+    @Final
+    private RenderTargets renderTargets;
+
+    @Shadow(remap = false)
+    @Final
+    private ImmutableSet<Integer> flippedAfterTranslucent;
 
     @Unique
     private ProgramSet programSet;
+
+    @Unique
+    private GlFramebuffer irisveil$endSeaFinalCompositeTarget;
 
     @Override
     public ProgramSet getProgramSet(){
@@ -43,6 +58,16 @@ public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelin
         }
     }
 
+    @Override
+    public void irisveil$bindEndSeaFinalCompositeTarget() {
+        if (irisveil$endSeaFinalCompositeTarget == null) {
+            irisveil$endSeaFinalCompositeTarget = renderTargets.createGbufferFramebuffer(
+                flippedAfterTranslucent,
+                SimulatedEndSeaCompat.finalCompositeDrawBuffers());
+        }
+
+        irisveil$endSeaFinalCompositeTarget.bind();
+    }
 
     @Invoker(remap = false)
     @Override
