@@ -83,8 +83,8 @@ public class GlslTransformerVeilPatcher {
     private static final Set<String> VEIL_RENAME = Set.of(
         "fog_distance", "minecraft_mix_light", "minecraft_sample_lightmap",
         "block_brightness", "getVelocity", "linear_fog",
-        "vertexDistance", "vertexColor", "lightMapColor", "overlayColor", "texCoord0",
-        "lengthData", "vertexLight"
+        "vertexDistance", "vertexColor", "lightMapColor", "lightmapColor", "overlayColor",
+        "texCoord0", "texCoord2", "normal", "lengthData", "vertexLight"
     );
 
     // Veil attribute/uniform names to SKIP copying (Iris provides these)
@@ -225,7 +225,7 @@ public class GlslTransformerVeilPatcher {
             + ASTPrinter.printSimple(veilMainBody)
             + "\n"
             + VEIL_CLIP_POSITION + " = gl_Position;\n"
-            + VEIL_MODEL_VERTEX + " = inverse(gl_ProjectionMatrix * gl_ModelViewMatrix) * gl_Position;\n"
+            + VEIL_MODEL_VERTEX + " = gl_Vertex;\n"
             + "}";
 
         return veilTransformer.parseNodeSeparate(

@@ -4,7 +4,9 @@
   "package": "top.leonx.irisveil.compat.simulated.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "MixinEndSeaShadowRenderer"
+    "MixinEndSeaShadowRenderer",
+    "MixinPlungerLauncherItemRenderer",
+    "MixinPhysicsStaffItemRenderer"
   ],
   "injectors": {
     "defaultRequire": 1

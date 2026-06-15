@@ -4,6 +4,7 @@
   "package": "top.leonx.irisveil.mixin.iris",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "MixinGameRendererAccessor",
     "MixinIrisRenderingPipeline",
     "MixinLevelRendererEndSea",
     "MixinProgramSource",
