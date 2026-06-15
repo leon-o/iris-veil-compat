@@ -20,4 +20,6 @@ public interface IrisRenderingPipelineAccessor {
     ShaderInstance invokeCreateShadowShader(String name, ProgramSource source, ProgramId programId, AlphaTest fallbackAlpha,
                                             VertexFormat vertexFormat, boolean isIntensity, boolean isFullbright,
                                             boolean isText, boolean isIE) throws IOException;
+
+    void irisveil$bindEndSeaFinalCompositeTarget();
 }

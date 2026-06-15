@@ -7,6 +7,7 @@ import net.irisshaders.iris.shaderpack.loading.ProgramId;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
 import top.leonx.irisveil.IrisVeilCompat;
+import top.leonx.irisveil.compat.simulated.SimulatedEndSeaCompat;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -24,6 +25,9 @@ import java.util.concurrent.ConcurrentMap;
  * falls back to the original Veil shader.
  */
 public class IrisVeilShaderCache {
+
+    private static final ResourceLocation SIMULATED_END_SEA =
+        ResourceLocation.fromNamespaceAndPath("simulated", "end_sea");
 
     private static final ConcurrentMap<String, ShaderInstance> CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, IrisVeilProgramLinker.Params> PARAM_CACHE = new ConcurrentHashMap<>();
@@ -55,6 +59,14 @@ public class IrisVeilShaderCache {
      * @return a new or cached Iris ShaderInstance, or {@code null} if creation failed
      */
     public static ShaderInstance getOrCreate(ResourceLocation shaderPath) {
+        if (isRenderingEndSeaShadowMap()) {
+            return null;
+        }
+
+        if (!shouldReplaceShader(shaderPath)) {
+            return null;
+        }
+
         // Check if the shader is even available (lazy Veil shader compilation)
         ShaderProgram veilProgram = getVeilProgram(shaderPath);
         if (veilProgram == null || !veilProgram.isValid()) {
@@ -78,6 +90,33 @@ public class IrisVeilShaderCache {
         }
 
         return getOrCreate(shaderPath, params.programId(), params.useDithering());
+    }
+
+    /**
+     * Returns whether a Veil shader is safe to replace with an Iris gbuffer program.
+     *
+     * <p>Some Veil shaders are standalone transparent world effects rather than
+     * gbuffer geometry. Replacing them with shaderpack block/entity programs
+     * drops their custom samplers and blend semantics.
+     */
+    public static boolean shouldReplaceShader(ResourceLocation shaderPath) {
+        return !SIMULATED_END_SEA.equals(shaderPath);
+    }
+
+    public static boolean isRenderingEndSeaShadowMap() {
+        return SimulatedEndSeaCompat.isRenderingEndSeaShadowMap();
+    }
+
+    public static boolean isRenderingExternalShadowMap(String className, String methodName) {
+        return SimulatedEndSeaCompat.isRenderingEndSeaShadowMap(className, methodName);
+    }
+
+    /**
+     * Returns a small generation key for external render states that must bypass
+     * the Iris shader replacement path without reusing a shard-local cached shader.
+     */
+    public static int getExternalRenderStateGeneration() {
+        return isRenderingEndSeaShadowMap() ? 1 : 0;
     }
 
     /**
