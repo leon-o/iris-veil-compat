@@ -181,7 +181,8 @@ dependencies {
     // Create Aeronautics for local runtime testing
     localRuntime("maven.modrinth:create-aeronautics:${aeronautics_version}")
 
-    // Sable for local runtime testing (Aeronautics dependency)
+    // Sable is compile-visible for optional compatibility hooks, but remains optional at runtime.
+    compileOnly("maven.modrinth:sable:${sable_version}")
     localRuntime("maven.modrinth:sable:${sable_version}")
 
     // Iris Flywheel Compat for local runtime testing
