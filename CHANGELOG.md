@@ -1,3 +1,8 @@
+### 0.3.0
+- Fixed End Sea rendering issues when using Iris shaderpacks.
+- Fixed Rope and Spring shadows disappearing with some shaderpacks.
+- Improved compatibility with Photon, Complementary, BSL, and Bliss for affected Veil effects.
+
 ### 0.2.0
 - Added Iris shadow pass support for Veil shaders so block entity shadows render into the shadow map instead of gbuffers.
 - Preserved shaderpack shadow alpha-test behavior when building Veil shadow programs.
