@@ -15,11 +15,10 @@ import top.leonx.irisveil.compat.veil.RenderStateManager;
  * with the correct Iris program ({@code ProgramId.Shadow}) instead of the
  * default block program.
  *
- * <p>Unlike Flywheel, Veil shaders render through standard Minecraft
- * {@code RenderType} / {@code ShaderProgramShard} — Iris's existing
- * block-entity iteration during the shadow pass already triggers Veil
- * draw calls.  No explicit entity-rendering hook (like Flywheel's
- * {@code afterEntities()}) is required here.
+ * <p>Veil draw calls can still run from render-stage hooks while Iris is
+ * rendering the shadow map. The full {@code renderShadows()} method must be
+ * treated as a shadow pass even when the shaderpack disables block-entity
+ * shadow iteration, otherwise those draws keep using gbuffer shaders.
  */
 @Mixin(value = ShadowRenderer.class)
 public abstract class MixinShadowRenderer {
@@ -33,9 +32,7 @@ public abstract class MixinShadowRenderer {
             net.irisshaders.iris.mixin.LevelRendererAccessor levelRendererAccessor,
             Camera camera,
             CallbackInfo ci) {
-        if (shouldRenderBlockEntities) {
-            RenderStateManager.setRenderingShadow(true);
-        }
+        RenderStateManager.beginShadowPass(shouldRenderBlockEntities);
     }
 
     @Inject(method = "renderShadows", at = @At("TAIL"))
@@ -43,6 +40,6 @@ public abstract class MixinShadowRenderer {
             net.irisshaders.iris.mixin.LevelRendererAccessor levelRendererAccessor,
             Camera camera,
             CallbackInfo ci) {
-        RenderStateManager.setRenderingShadow(false);
+        RenderStateManager.endShadowPass();
     }
 }

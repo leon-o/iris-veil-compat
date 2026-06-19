@@ -20,10 +20,12 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.accessors.IrisRenderingPipelineAccessor;
-import top.leonx.irisveil.compat.simulated.SimulatedEndSeaCompat;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 @Mixin(IrisRenderingPipeline.class)
 public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelineAccessor {
@@ -39,7 +41,7 @@ public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelin
     private ProgramSet programSet;
 
     @Unique
-    private GlFramebuffer irisveil$endSeaFinalCompositeTarget;
+    private Map<String, GlFramebuffer> irisveil$compatGbufferTargets;
 
     @Override
     public ProgramSet getProgramSet(){
@@ -59,14 +61,17 @@ public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelin
     }
 
     @Override
-    public void irisveil$bindEndSeaFinalCompositeTarget() {
-        if (irisveil$endSeaFinalCompositeTarget == null) {
-            irisveil$endSeaFinalCompositeTarget = renderTargets.createGbufferFramebuffer(
-                flippedAfterTranslucent,
-                SimulatedEndSeaCompat.finalCompositeDrawBuffers());
+    public void irisveil$bindCompatGbufferFramebuffer(int[] drawBuffers) {
+        if (irisveil$compatGbufferTargets == null) {
+            irisveil$compatGbufferTargets = new HashMap<>();
         }
 
-        irisveil$endSeaFinalCompositeTarget.bind();
+        int[] drawBuffersCopy = drawBuffers.clone();
+        String key = Arrays.toString(drawBuffersCopy);
+        GlFramebuffer target = irisveil$compatGbufferTargets.computeIfAbsent(
+            key,
+            ignored -> renderTargets.createGbufferFramebuffer(flippedAfterTranslucent, drawBuffersCopy));
+        target.bind();
     }
 
     @Invoker(remap = false)

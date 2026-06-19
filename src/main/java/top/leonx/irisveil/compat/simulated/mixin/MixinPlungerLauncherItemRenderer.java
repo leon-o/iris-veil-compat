@@ -5,10 +5,12 @@ import org.joml.Matrix4fc;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import top.leonx.irisveil.compat.simulated.SimulatedFirstPersonItemCapture;
 
+@Pseudo
 @Mixin(
     targets = "dev.simulated_team.simulated.content.items.plunger_launcher.PlungerLauncherItemRenderer",
     remap = false

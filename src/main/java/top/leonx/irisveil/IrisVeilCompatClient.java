@@ -9,6 +9,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import top.leonx.irisveil.compat.simulated.SimulatedEndSeaCompat;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = IrisVeilCompat.MODID, dist = Dist.CLIENT)
@@ -24,7 +25,7 @@ public class IrisVeilCompatClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        // Some client setup code
+        SimulatedEndSeaCompat.registerCompat();
         IrisVeilCompat.LOGGER.info("HELLO FROM CLIENT SETUP");
         IrisVeilCompat.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
     }

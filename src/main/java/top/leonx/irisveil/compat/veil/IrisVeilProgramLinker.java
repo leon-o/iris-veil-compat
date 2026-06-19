@@ -158,17 +158,16 @@ public class IrisVeilProgramLinker {
             String shaderName = (isShadow ? "shadow_veil_" : "gbuffers_veil_") +
                 shaderPath.getNamespace() + "_" + shaderPath.getPath().replace('/', '_');
 
-            // 9. Patch Iris vertex shader for Veil format.
-            // Shadow shaders are left unpatched — they only need depth output
-            // and the Veil gbuffer injection (modelVertex routing, gl_Color
-            // replacement, extension attribute removal) produces type mismatches
-            // (e.g. vec4→vec3) against the simpler shadow shader structure.
-            String patchedVertSource;
-            if (isShadow) {
-                patchedVertSource = irisVertSource;
-                // irisFragSource already holds the shadow fragment source
-            } else {
-                patchedVertSource = patcher.patch(irisVertSource, veilVertSource, format, shaderName);
+            // 9. Patch Iris vertex shader for Veil format. Shadow programs
+            // still need the Veil vertex path; otherwise Rope-like shaders lose
+            // their model-space deformation before Iris writes shadow depth.
+            String patchedVertSource = patchVertexSource(
+                irisVertSource,
+                veilVertSource,
+                format,
+                shaderName,
+                patcher);
+            if (!isShadow) {
                 irisFragSource = fragmentPatcher.patch(irisFragSource, veilFragSource, useDithering);
             }
 
@@ -284,6 +283,15 @@ public class IrisVeilProgramLinker {
             useDithering = false;
         }
         return new Params(programId, useDithering);
+    }
+
+    static String patchVertexSource(
+            String irisVertSource,
+            String veilVertSource,
+            VertexFormat format,
+            String shaderName,
+            GlslTransformerVeilPatcher patcher) {
+        return patcher.patch(irisVertSource, veilVertSource, format, shaderName);
     }
 
     /**

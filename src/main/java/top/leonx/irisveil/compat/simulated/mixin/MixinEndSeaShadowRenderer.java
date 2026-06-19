@@ -27,7 +27,8 @@ public class MixinEndSeaShadowRenderer {
             shift = At.Shift.BEFORE,
             remap = false
         ),
-        remap = false
+        remap = false,
+        require = 0
     )
     private static void irisveil$prepareEndSeaShadowMapState(
         VeilRenderLevelStageEvent.Stage stage,
