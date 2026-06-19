@@ -61,6 +61,58 @@ class GlslTransformerVeilPatcherTest {
         }
         """;
 
+    private static final String ROPE_VERTEX_WITH_CHUNK_OFFSET = ROPE_VERTEX.replace(
+        "in vec3 Normal;",
+        "in vec3 Normal;\nuniform vec3 ChunkOffset;");
+
+    private static final String PHOTON_SHADOW_VERTEX = """
+        #version 330 compatibility
+        in vec3 at_midBlock;
+
+        vec3 transform(mat4 m, vec3 pos) {
+            return mat3(m) * pos + m[3].xyz;
+        }
+
+        void update_voxel_map() {
+            vec3 model_pos = gl_Vertex.xyz + at_midBlock * (1.0 / 64.0);
+            vec3 view_pos = transform(gl_ModelViewMatrix, model_pos);
+        }
+
+        void main() {
+            gl_Position = ftransform();
+            update_voxel_map();
+        }
+        """;
+
+    private static final String PHOTON_REPROJECTING_SHADOW_VERTEX = """
+        #version 330 compatibility
+
+        uniform mat4 shadowModelViewInverse;
+        uniform vec3 cameraPosition;
+
+        vec3 transform(mat4 m, vec3 pos) {
+            return mat3(m) * pos + m[3].xyz;
+        }
+
+        vec4 project(mat4 m, vec3 pos) {
+            return m * vec4(pos, 1.0);
+        }
+
+        vec3 distort_shadow_space(vec3 shadow_clip_pos) {
+            return shadow_clip_pos;
+        }
+
+        void main() {
+            vec3 pos = transform(gl_ModelViewMatrix, gl_Vertex.xyz);
+            pos = transform(shadowModelViewInverse, pos);
+            pos = pos + cameraPosition;
+            pos = pos - cameraPosition;
+            vec3 shadow_clip_pos = project(gl_ProjectionMatrix, pos).xyz;
+            shadow_clip_pos = distort_shadow_space(shadow_clip_pos);
+            gl_Position = vec4(shadow_clip_pos, 1.0);
+        }
+        """;
+
     @Test
     void renamesRopeVaryingsToMatchFragmentBridge() {
         String patched = patchRopeVertex();
@@ -86,6 +138,52 @@ class GlslTransformerVeilPatcherTest {
             () -> assertFalse(
                 patched.contains("inverse(gl_ProjectionMatrix * gl_ModelViewMatrix) * gl_Position"),
                 patched)
+        );
+    }
+
+    @Test
+    void preservesPhotonShadowAtMidBlockVectorWidth() {
+        String patched = new GlslTransformerVeilPatcher().patch(
+            PHOTON_SHADOW_VERTEX,
+            ROPE_VERTEX,
+            new VertexFormat(),
+            "shadow_veil_simulated_spring_spring");
+
+        assertAll(
+            () -> assertTrue(patched.contains("_veil_modelVertex.xyz + vec3(0.0"), patched),
+            () -> assertFalse(patched.contains("_veil_modelVertex.xyz + vec4(0.0"), patched)
+        );
+    }
+
+    @Test
+    void routesPhotonShadowReprojectionThroughShadowMatrices() {
+        String patched = new GlslTransformerVeilPatcher().patch(
+            PHOTON_REPROJECTING_SHADOW_VERTEX,
+            ROPE_VERTEX_WITH_CHUNK_OFFSET,
+            new VertexFormat(),
+            "shadow_veil_simulated_rope_rope");
+
+        assertAll(
+            () -> assertTrue(patched.contains("transform(shadowModelView, _veil_modelVertex.xyz)"), patched),
+            () -> assertTrue(patched.contains("project(shadowProjection, pos)"), patched),
+            () -> assertFalse(patched.contains("transform(gl_ModelViewMatrix, _veil_modelVertex.xyz)"), patched),
+            () -> assertFalse(patched.contains("project(gl_ProjectionMatrix, pos)"), patched)
+        );
+    }
+
+    @Test
+    void keepsPhotonShadowReprojectionBakedForSpringWithoutChunkOffset() {
+        String patched = new GlslTransformerVeilPatcher().patch(
+            PHOTON_REPROJECTING_SHADOW_VERTEX,
+            ROPE_VERTEX,
+            new VertexFormat(),
+            "shadow_veil_simulated_spring_spring");
+
+        assertAll(
+            () -> assertTrue(patched.contains("transform(mat4(1.0"), patched),
+            () -> assertTrue(patched.contains("project(shadowProjection, pos)"), patched),
+            () -> assertFalse(patched.contains("transform(shadowModelView, _veil_modelVertex.xyz)"), patched),
+            () -> assertFalse(patched.contains("project(gl_ProjectionMatrix, pos)"), patched)
         );
     }
 

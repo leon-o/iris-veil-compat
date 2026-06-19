@@ -189,9 +189,9 @@ public class GlslTransformerVeilPatcher {
     private void transform(TranslationUnit irisTree, Root irisRoot, VeilPatchParams params) {
         String veilSource = params.veilVertexSource;
         if (veilSource == null || veilSource.isEmpty()) {
-            removeExtensionAttributes(irisRoot, new HashMap<>());
-            for (var e : DEFAULT_REPLACEMENTS.entrySet())
-                irisRoot.replaceReferenceExpressions(transformer, e.getKey(), e.getValue());
+            var dims = new HashMap<String, Integer>();
+            removeExtensionAttributes(irisRoot, dims);
+            replaceExtensionAttributes(irisRoot, dims);
             return;
         }
 
@@ -204,6 +204,7 @@ public class GlslTransformerVeilPatcher {
         // (ModelViewMat → gl_ModelViewMatrix, Position → gl_Vertex, etc.)
         // These resolve to Iris's correctly-set uniforms/attributes after TransformPatcher.
         var veilRoot = veilTree.getRoot();
+        boolean usesChunkOffset = params.shadowProgram && declaresChunkOffset(processed);
         Map<String, String> veilReplacements = selectVeilReplacements(params, processed);
         for (var entry : veilReplacements.entrySet()) {
             veilRoot.replaceReferenceExpressions(veilTransformer, entry.getKey(), entry.getValue());
@@ -227,6 +228,7 @@ public class GlslTransformerVeilPatcher {
         injectVeilDeclarations(irisTree, irisRoot, veilTree, mainFuncDecl);
         if (params.shadowProgram) {
             injectShadowUniformDeclarations(irisTree, irisRoot);
+            replaceIrisShadowMatrices(irisRoot, usesChunkOffset);
         }
 
         // Step 6: Route Iris's later vertex reads through Veil's computed model-space vertex.
@@ -252,8 +254,7 @@ public class GlslTransformerVeilPatcher {
         // Step 8: Remove Iris extension attributes
         var dims = new HashMap<String, Integer>();
         removeExtensionAttributes(irisRoot, dims);
-        for (var e : DEFAULT_REPLACEMENTS.entrySet())
-            irisRoot.replaceReferenceExpressions(transformer, e.getKey(), e.getValue());
+        replaceExtensionAttributes(irisRoot, dims);
 
         IrisVeilCompat.LOGGER.debug("IrisVeilPatcher: injected Veil shader (Flywheel pattern)");
     }
@@ -357,6 +358,14 @@ public class GlslTransformerVeilPatcher {
         }
     }
 
+    private void replaceIrisShadowMatrices(Root irisRoot, boolean usesChunkOffset) {
+        String modelView = usesChunkOffset ? "shadowModelView" : "mat4(1.0)";
+        String normal = usesChunkOffset ? "mat3(shadowModelView)" : "mat3(1.0)";
+        irisRoot.replaceReferenceExpressions(transformer, "gl_ModelViewMatrix", modelView);
+        irisRoot.replaceReferenceExpressions(transformer, "gl_ProjectionMatrix", "shadowProjection");
+        irisRoot.replaceReferenceExpressions(transformer, "gl_NormalMatrix", normal);
+    }
+
     private static void removeExtensionAttributes(Root root, Map<String, Integer> dims) {
         root.process(
             root.nodeIndex.getStream(DeclarationExternalDeclaration.class).distinct(),
@@ -375,6 +384,42 @@ public class GlslTransformerVeilPatcher {
                 }
             }
         );
+    }
+
+    private void replaceExtensionAttributes(Root root, Map<String, Integer> dims) {
+        for (var e : DEFAULT_REPLACEMENTS.entrySet()) {
+            root.replaceReferenceExpressions(transformer, e.getKey(), extensionAttributeReplacement(e.getKey(), dims));
+        }
+    }
+
+    private static String extensionAttributeReplacement(String name, Map<String, Integer> dims) {
+        Integer dimension = dims.get(name);
+        if (dimension == null) {
+            return DEFAULT_REPLACEMENTS.get(name);
+        }
+        return switch (name) {
+            case "at_tangent" -> switch (dimension) {
+                case 2 -> "vec2(1.0, 0.0)";
+                case 3 -> "vec3(1.0, 0.0, 0.0)";
+                case 4 -> "vec4(1.0, 0.0, 0.0, 1.0)";
+                default -> DEFAULT_REPLACEMENTS.get(name);
+            };
+            case "mc_midTexCoord" -> dimension == 4
+                ? "vec4(0.0, 0.0, 0.0, 1.0)"
+                : vectorZero(dimension);
+            case "mc_Entity", "at_midBlock" -> vectorZero(dimension);
+            default -> DEFAULT_REPLACEMENTS.get(name);
+        };
+    }
+
+    private static String vectorZero(int dimension) {
+        return switch (dimension) {
+            case 1 -> "0.0";
+            case 2 -> "vec2(0.0)";
+            case 3 -> "vec3(0.0)";
+            case 4 -> "vec4(0.0)";
+            default -> "vec4(0.0)";
+        };
     }
 
     private static boolean hasGlobalDeclaration(Root root, String name) {
