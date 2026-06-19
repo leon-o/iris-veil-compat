@@ -21,5 +21,5 @@ public interface IrisRenderingPipelineAccessor {
                                             VertexFormat vertexFormat, boolean isIntensity, boolean isFullbright,
                                             boolean isText, boolean isIE) throws IOException;
 
-    void irisveil$bindEndSeaFinalCompositeTarget();
+    void irisveil$bindCompatGbufferFramebuffer(int[] drawBuffers);
 }

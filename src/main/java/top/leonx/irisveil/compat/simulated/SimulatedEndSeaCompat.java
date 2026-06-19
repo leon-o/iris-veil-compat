@@ -1,12 +1,16 @@
 package top.leonx.irisveil.compat.simulated;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import top.leonx.irisveil.IrisVeilCompat;
+import top.leonx.irisveil.compat.veil.VeilCompatRegistry;
 
 import java.lang.reflect.Method;
 
 public class SimulatedEndSeaCompat {
+    private static final ResourceLocation END_SEA_SHADER =
+        ResourceLocation.fromNamespaceAndPath("simulated", "end_sea");
     private static final String END_SEA_RENDERER =
         "dev.simulated_team.simulated.content.end_sea.EndSeaRenderer";
     private static final String END_SEA_SHADOW_RENDERER =
@@ -17,8 +21,26 @@ public class SimulatedEndSeaCompat {
 
     private static volatile @Nullable Method renderMethod;
     private static volatile boolean renderLookupFailed;
+    private static volatile boolean registered;
 
     private SimulatedEndSeaCompat() {
+    }
+
+    public static synchronized void registerCompat() {
+        if (registered) {
+            return;
+        }
+
+        VeilCompatRegistry.excludeShaderReplacement(END_SEA_SHADER);
+        VeilCompatRegistry.registerExternalRenderState(
+            "simulated:end_sea_shadow",
+            SimulatedEndSeaCompat::isRenderingEndSeaShadowMap);
+        VeilCompatRegistry.registerWorldRenderHook(
+            "simulated:end_sea",
+            finalCompositeDrawBuffers(),
+            SimulatedEndSeaCompat::shouldRenderWorldHook,
+            SimulatedEndSeaCompat::render);
+        registered = true;
     }
 
     public static boolean render(Object camera, Object gameRenderer) {
@@ -57,6 +79,10 @@ public class SimulatedEndSeaCompat {
     public static void prepareShadowMapRenderState() {
         RenderSystem.enableDepthTest();
         RenderSystem.depthMask(true);
+    }
+
+    private static boolean shouldRenderWorldHook() {
+        return !isRenderingEndSeaShadowMap() && getRenderMethod() != null;
     }
 
     private static @Nullable Method getRenderMethod() {

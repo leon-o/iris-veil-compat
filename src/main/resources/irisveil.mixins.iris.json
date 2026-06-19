@@ -6,7 +6,7 @@
   "client": [
     "MixinGameRendererAccessor",
     "MixinIrisRenderingPipeline",
-    "MixinLevelRendererEndSea",
+    "MixinLevelRendererCompatHooks",
     "MixinProgramSource",
     "MixinProgramDirectives",
     "MixinShadowRenderer"
