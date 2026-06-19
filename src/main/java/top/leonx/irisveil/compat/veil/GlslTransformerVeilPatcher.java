@@ -55,6 +55,7 @@ import java.util.regex.Pattern;
  * </ol>
  */
 public class GlslTransformerVeilPatcher {
+    private static final String SHADOW_VEIL_PREFIX = "shadow_veil_";
     private static final String VEIL_MODEL_VERTEX = "_veil_modelVertex";
     private static final String VEIL_CLIP_POSITION = "_veil_clipPosition";
 //    private static final String VEIL_COLOR = "_veil_Color";
@@ -102,6 +103,32 @@ public class GlslTransformerVeilPatcher {
         "Light1_Direction", "gl_Normal"
     );
 
+    private static final Map<String, String> SHADOW_VEIL_TO_IRIS = Map.of(
+        "ModelViewMat", "shadowModelView",
+        "ProjMat",       "shadowProjection",
+        "NormalMat",     "mat3(shadowModelView)",
+        "Position",      "gl_Vertex.xyz",
+        "Color",         "gl_Color",
+        "UV0",           "gl_MultiTexCoord0.xy",
+        "UV2",           "ivec2(gl_MultiTexCoord1.xy)",
+        "Normal",        "gl_Normal",
+        "Light0_Direction", "gl_Normal",
+        "Light1_Direction", "gl_Normal"
+    );
+
+    private static final Map<String, String> SHADOW_BAKED_VEIL_TO_IRIS = Map.of(
+        "ModelViewMat", "mat4(1.0)",
+        "ProjMat",       "shadowProjection",
+        "NormalMat",     "mat3(1.0)",
+        "Position",      "gl_Vertex.xyz",
+        "Color",         "gl_Color",
+        "UV0",           "gl_MultiTexCoord0.xy",
+        "UV2",           "ivec2(gl_MultiTexCoord1.xy)",
+        "Normal",        "gl_Normal",
+        "Light0_Direction", "gl_Normal",
+        "Light1_Direction", "gl_Normal"
+    );
+
     private static final Set<String> LIGHTMAP_SAMPLE_FUNCTIONS = Set.of(
         "texture", "texture2D", "texelFetch",
         "minecraft_sample_lightmap", "_veil_minecraft_sample_lightmap"
@@ -109,6 +136,8 @@ public class GlslTransformerVeilPatcher {
 
     private static final Pattern VERSION_PATTERN =
         Pattern.compile("^.*#version\\s+(\\d+)(\\s+\\w+)?", Pattern.DOTALL);
+    private static final Pattern CHUNK_OFFSET_PATTERN =
+        Pattern.compile("\\bChunkOffset\\b");
 
     private final SingleASTTransformer<VeilPatchParams> transformer;
     private final SingleASTTransformer<VeilPatchParams> veilTransformer;
@@ -145,12 +174,16 @@ public class GlslTransformerVeilPatcher {
         if (irisVertexSource == null || targetFormat == null) return irisVertexSource;
         try {
             String result = transformer.transform(irisVertexSource,
-                new VeilPatchParams(veilVertexSource, targetFormat));
+                new VeilPatchParams(veilVertexSource, targetFormat, isShadowProgram(shaderName)));
             return result;
         } catch (Exception e) {
             IrisVeilCompat.LOGGER.error("IrisVeilPatcher: AST transform failed, falling back to original", e);
             return irisVertexSource;
         }
+    }
+
+    private static boolean isShadowProgram(String shaderName) {
+        return shaderName != null && shaderName.startsWith(SHADOW_VEIL_PREFIX);
     }
 
     private void transform(TranslationUnit irisTree, Root irisRoot, VeilPatchParams params) {
@@ -169,9 +202,10 @@ public class GlslTransformerVeilPatcher {
 
         // Step 2: Replace Veil matrix/attribute names with Iris equivalents
         // (ModelViewMat → gl_ModelViewMatrix, Position → gl_Vertex, etc.)
-        // These resolve to Iris's correctly-set uniforms/attributes after TransformPatcher
+        // These resolve to Iris's correctly-set uniforms/attributes after TransformPatcher.
         var veilRoot = veilTree.getRoot();
-        for (var entry : VEIL_TO_IRIS.entrySet()) {
+        Map<String, String> veilReplacements = selectVeilReplacements(params, processed);
+        for (var entry : veilReplacements.entrySet()) {
             veilRoot.replaceReferenceExpressions(veilTransformer, entry.getKey(), entry.getValue());
         }
 
@@ -191,6 +225,9 @@ public class GlslTransformerVeilPatcher {
         // Step 5: Inject Veil declarations (functions, Veil-specific uniforms/varyings)
         // into Iris tree, BEFORE Iris declarations
         injectVeilDeclarations(irisTree, irisRoot, veilTree, mainFuncDecl);
+        if (params.shadowProgram) {
+            injectShadowUniformDeclarations(irisTree, irisRoot);
+        }
 
         // Step 6: Route Iris's later vertex reads through Veil's computed model-space vertex.
         // This mirrors Flywheel: Veil computes first, then Iris/Photon consumes the result.
@@ -203,7 +240,9 @@ public class GlslTransformerVeilPatcher {
 //            "vec4 " + VEIL_COLOR + ";");
         irisRoot.replaceReferenceExpressions(transformer, "gl_Vertex", VEIL_MODEL_VERTEX);
         irisRoot.replaceExpressionMatches(transformer, FTRANSFORM_EXPR,
-            "gl_ProjectionMatrix * gl_ModelViewMatrix * " + VEIL_MODEL_VERTEX);
+            params.shadowProgram
+                ? VEIL_CLIP_POSITION
+                : "gl_ProjectionMatrix * gl_ModelViewMatrix * " + VEIL_MODEL_VERTEX);
 
         // Step 7: Inject Veil main body at START of Iris main, in a fresh block scope.
         // Re-parsing avoids moving AST nodes between roots, which glsl-transformer rejects.
@@ -251,6 +290,21 @@ public class GlslTransformerVeilPatcher {
         }
     }
 
+    private static Map<String, String> selectVeilReplacements(VeilPatchParams params, String processedVeilSource) {
+        if (!params.shadowProgram) {
+            return VEIL_TO_IRIS;
+        }
+
+        // Spring-like block entity renderers bake Iris's shadow PoseStack into
+        // Position before shader upload. Rope-like renderers with ChunkOffset use
+        // camera-relative vertices and still need shadowModelView in the shader.
+        return declaresChunkOffset(processedVeilSource) ? SHADOW_VEIL_TO_IRIS : SHADOW_BAKED_VEIL_TO_IRIS;
+    }
+
+    private static boolean declaresChunkOffset(String source) {
+        return source != null && CHUNK_OFFSET_PATTERN.matcher(source).find();
+    }
+
     private boolean isLightmapSampleCall(FunctionCallExpression call) {
         var functionName = call.getFunctionName();
         if (functionName == null || !LIGHTMAP_SAMPLE_FUNCTIONS.contains(functionName.getName())) {
@@ -292,6 +346,17 @@ public class GlslTransformerVeilPatcher {
         }
     }
 
+    private void injectShadowUniformDeclarations(TranslationUnit irisTree, Root irisRoot) {
+        if (!hasGlobalDeclaration(irisRoot, "shadowModelView")) {
+            irisTree.parseAndInjectNode(transformer, ASTInjectionPoint.BEFORE_DECLARATIONS,
+                "uniform mat4 shadowModelView;");
+        }
+        if (!hasGlobalDeclaration(irisRoot, "shadowProjection")) {
+            irisTree.parseAndInjectNode(transformer, ASTInjectionPoint.BEFORE_DECLARATIONS,
+                "uniform mat4 shadowProjection;");
+        }
+    }
+
     private static void removeExtensionAttributes(Root root, Map<String, Integer> dims) {
         root.process(
             root.nodeIndex.getStream(DeclarationExternalDeclaration.class).distinct(),
@@ -325,6 +390,12 @@ public class GlslTransformerVeilPatcher {
     public static class VeilPatchParams implements JobParameters {
         public final String veilVertexSource;
         public final VertexFormat targetFormat;
-        public VeilPatchParams(String s, VertexFormat f) { veilVertexSource = s; targetFormat = f; }
+        public final boolean shadowProgram;
+
+        public VeilPatchParams(String s, VertexFormat f, boolean shadowProgram) {
+            veilVertexSource = s;
+            targetFormat = f;
+            this.shadowProgram = shadowProgram;
+        }
     }
 }
