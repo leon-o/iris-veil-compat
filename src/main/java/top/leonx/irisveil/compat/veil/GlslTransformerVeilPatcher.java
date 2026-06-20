@@ -205,7 +205,7 @@ public class GlslTransformerVeilPatcher {
         // These resolve to Iris's correctly-set uniforms/attributes after TransformPatcher.
         var veilRoot = veilTree.getRoot();
         boolean usesChunkOffset = params.shadowProgram && declaresChunkOffset(processed);
-        Map<String, String> veilReplacements = selectVeilReplacements(params, processed);
+        Map<String, String> veilReplacements = selectVeilReplacements(params, processed, veilRoot);
         for (var entry : veilReplacements.entrySet()) {
             veilRoot.replaceReferenceExpressions(veilTransformer, entry.getKey(), entry.getValue());
         }
@@ -291,15 +291,23 @@ public class GlslTransformerVeilPatcher {
         }
     }
 
-    private static Map<String, String> selectVeilReplacements(VeilPatchParams params, String processedVeilSource) {
-        if (!params.shadowProgram) {
-            return VEIL_TO_IRIS;
-        }
+    private static Map<String, String> selectVeilReplacements(VeilPatchParams params, String processedVeilSource,
+                                                              Root veilRoot) {
+        Map<String, String> replacements = new HashMap<>(
+            params.shadowProgram
+                ? (declaresChunkOffset(processedVeilSource) ? SHADOW_VEIL_TO_IRIS : SHADOW_BAKED_VEIL_TO_IRIS)
+                : VEIL_TO_IRIS);
+        replacements.put("Color", colorReplacement(veilRoot));
+        return replacements;
+    }
 
-        // Spring-like block entity renderers bake Iris's shadow PoseStack into
-        // Position before shader upload. Rope-like renderers with ChunkOffset use
-        // camera-relative vertices and still need shadowModelView in the shader.
-        return declaresChunkOffset(processedVeilSource) ? SHADOW_VEIL_TO_IRIS : SHADOW_BAKED_VEIL_TO_IRIS;
+    private static String colorReplacement(Root veilRoot) {
+        return switch (globalDeclarationDimension(veilRoot, "Color")) {
+            case 1 -> "gl_Color.r";
+            case 2 -> "gl_Color.rg";
+            case 3 -> "gl_Color.rgb";
+            default -> "gl_Color";
+        };
     }
 
     private static boolean declaresChunkOffset(String source) {
@@ -420,6 +428,20 @@ public class GlslTransformerVeilPatcher {
             case 4 -> "vec4(0.0)";
             default -> "vec4(0.0)";
         };
+    }
+
+    private static int globalDeclarationDimension(Root root, String name) {
+        for (DeclarationExternalDeclaration node : root.nodeIndex.getStream(DeclarationExternalDeclaration.class)
+            .distinct()
+            .toList()) {
+            if (node.getDeclaration() instanceof TypeAndInitDeclaration t &&
+                t.getMembers().stream().anyMatch(m -> name.equals(m.getName().getName())) &&
+                t.getType().getTypeSpecifier() instanceof BuiltinNumericTypeSpecifier s) {
+                int[] dimensions = s.type.getDimensions();
+                return dimensions.length > 0 ? dimensions[0] : 1;
+            }
+        }
+        return -1;
     }
 
     private static boolean hasGlobalDeclaration(Root root, String name) {

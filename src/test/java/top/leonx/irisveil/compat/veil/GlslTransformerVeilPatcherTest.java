@@ -142,6 +142,33 @@ class GlslTransformerVeilPatcherTest {
     }
 
     @Test
+    void matchesVeilColorInputWidthWhenColorIsVec3() {
+        String veilLightAreaVertex = """
+            #version 150
+            out vec3 lightColor;
+
+            in vec3 Position;
+            in vec3 Color;
+
+            void main() {
+                gl_Position = vec4(Position, 1.0);
+                lightColor = Color;
+            }
+            """;
+
+        String patched = new GlslTransformerVeilPatcher().patch(
+            IRIS_VERTEX,
+            veilLightAreaVertex,
+            new VertexFormat(),
+            "gbuffers_veil_veil_light_area");
+
+        assertAll(
+            () -> assertTrue(patched.contains("lightColor = gl_Color.rgb;"), patched),
+            () -> assertFalse(patched.contains("lightColor = gl_Color;"), patched)
+        );
+    }
+
+    @Test
     void preservesPhotonShadowAtMidBlockVectorWidth() {
         String patched = new GlslTransformerVeilPatcher().patch(
             PHOTON_SHADOW_VERTEX,

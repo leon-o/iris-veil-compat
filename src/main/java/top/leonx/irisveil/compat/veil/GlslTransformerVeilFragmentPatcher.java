@@ -45,6 +45,12 @@ public class GlslTransformerVeilFragmentPatcher {
         Pattern.compile("\\bout\\s+vec4\\s+_veil_fragColor\\s*;");
     private static final Pattern VEIL_TIME_UNIFORM =
         Pattern.compile("\\buniform\\s+float\\s+time\\s*;");
+    private static final Pattern LAYOUT_CONST_DECLARATION =
+        Pattern.compile("\\blayout\\s*\\([^)]*\\)\\s+(?=const\\b)");
+    private static final Pattern VEIL_DYNAMIC_OUTPUT_DECLARATION =
+        Pattern.compile("\\blayout\\s*\\([^)]*\\)\\s+out(?:\\s+\\w+)+\\s+_veil_VeilDynamic(?:Albedo|Normal)\\s*;\\s*");
+    private static final Pattern VEIL_DYNAMIC_OUTPUT_ASSIGNMENT =
+        Pattern.compile("\\b_veil_VeilDynamic(?:Albedo|Normal)\\s*=\\s*[^;]*;\\s*");
     private static final Pattern VERSION_PATTERN =
         Pattern.compile("^.*#version\\s+(\\d+)(\\s+\\w+)?", Pattern.DOTALL);
 
@@ -178,6 +184,8 @@ public class GlslTransformerVeilFragmentPatcher {
         String result = VERSION_LINE.matcher(ASTPrinter.printSimple(veilTree)).replaceAll("");
         result = removeMappedUniformDeclarations(result);
         result = removeDuplicateUniformDeclarations(result, irisUniformNames);
+        result = removeInvalidConstLayoutQualifiers(result);
+        result = removeVeilDynamicOutputSideChannels(result);
 
         for (var entry : VEIL_TO_IRIS.entrySet()) {
             result = result.replaceAll("\\b" + Pattern.quote(entry.getKey()) + "\\b",
@@ -287,6 +295,15 @@ public class GlslTransformerVeilFragmentPatcher {
                     + "\\s*(?:\\[[^]]*])?\\s*;\\s*\\R?", "");
         }
         return result;
+    }
+
+    static String removeInvalidConstLayoutQualifiers(String source) {
+        return LAYOUT_CONST_DECLARATION.matcher(source).replaceAll("");
+    }
+
+    static String removeVeilDynamicOutputSideChannels(String source) {
+        String result = VEIL_DYNAMIC_OUTPUT_DECLARATION.matcher(source).replaceAll("");
+        return VEIL_DYNAMIC_OUTPUT_ASSIGNMENT.matcher(result).replaceAll(";");
     }
 
     private static String forceCompatibilityVersion(String source) {

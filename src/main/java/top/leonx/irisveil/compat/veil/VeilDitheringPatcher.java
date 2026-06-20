@@ -182,10 +182,11 @@ public final class VeilDitheringPatcher {
                                 "if (" + alphaSource + " <= _veil_noise(gl_FragCoord.xy)) discard;");
                     });
                 }
-                return t.transform(fragmentSource, new ParseParams());
+                return GlslTransformerVeilFragmentPatcher.removeInvalidConstLayoutQualifiers(
+                        t.transform(fragmentSource, new ParseParams()));
             } catch (Exception e) {
                 IrisVeilCompat.LOGGER.warn("VeilDithering FragmentPatcher: AST injection failed for method={}", method, e);
-                return fragmentSource;
+                return GlslTransformerVeilFragmentPatcher.removeInvalidConstLayoutQualifiers(fragmentSource);
             }
         }
     }
