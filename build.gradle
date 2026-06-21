@@ -48,7 +48,7 @@ repositories {
     maven {
         // CaffeineMC (Sodium)
         name = 'CaffeineMC'
-        url = 'https://maven.caffeinemc.net'
+        url = 'https://maven.caffeinemc.net/releases'
     }
     maven {
         // Create, Ponder, Flywheel
@@ -93,7 +93,7 @@ neoForge {
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
 
-            programArguments.addAll '--quickPlaySingleplayer', "New World"
+            programArguments.addAll '--quickPlaySingleplayer', "EndSea"
         }
 
         server {
@@ -152,6 +152,32 @@ neoForge {
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+
+    sodiumNeoForgeWrapper {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+
+    sodiumNeoForgeMod {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+def sodiumDevRuntimeJar = tasks.register('sodiumDevRuntimeJar', Jar) {
+    archiveBaseName = 'sodium-neoforge-dev'
+    archiveVersion = sodium_version
+    destinationDirectory = layout.buildDirectory.dir('sodiumDevRuntime')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from({ zipTree(configurations.sodiumNeoForgeMod.singleFile) })
+    from({ zipTree(configurations.sodiumNeoForgeWrapper.singleFile) }) {
+        exclude 'META-INF/jarjar/**'
+        exclude 'META-INF/services/**'
+        exclude 'net/caffeinemc/mods/sodium/service/**'
+    }
 }
 
 dependencies {
@@ -168,7 +194,9 @@ dependencies {
     }
 
     // Sodium for local runtime testing
-    localRuntime("maven.modrinth:sodium:${sodium_version}-neoforge")
+    sodiumNeoForgeWrapper("net.caffeinemc:sodium-neoforge:${sodium_version}")
+    sodiumNeoForgeMod("net.caffeinemc:sodium-neoforge-mod:${sodium_version}")
+    localRuntime(files(sodiumDevRuntimeJar))
 
     // Create + dependencies for local runtime testing
     localRuntime("com.simibubi.create:create-${minecraft_version}:${create_version}") { transitive = false }
