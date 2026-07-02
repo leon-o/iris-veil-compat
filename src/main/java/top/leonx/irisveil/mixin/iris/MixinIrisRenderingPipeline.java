@@ -20,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.accessors.IrisRenderingPipelineAccessor;
+import top.leonx.irisveil.compat.light.IrisVeilLightPass;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 
 import java.io.IOException;
@@ -57,6 +58,24 @@ public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelin
             IrisVeilShaderCache.onShaderPackReload();
         } catch (Throwable e) {
             // Veil not present, silently ignore
+        }
+    }
+
+    @Inject(method = "finalizeLevelRendering", at = @At("HEAD"), remap = false)
+    private void irisveil$renderVeilLights(CallbackInfo callbackInfo) {
+        // Composite stage: gbuffer/depth are ready, so draw Veil's deferred lights. Guarded so a Veil-absent
+        // classload or any pass error can't break Iris rendering.
+        try {
+            IrisVeilLightPass.render(this.renderTargets, this.flippedAfterTranslucent);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Inject(method = "destroy", at = @At("HEAD"), remap = false)
+    private void irisveil$destroyVeilLights(CallbackInfo callbackInfo) {
+        try {
+            IrisVeilLightPass.close();
+        } catch (Throwable ignored) {
         }
     }
 
