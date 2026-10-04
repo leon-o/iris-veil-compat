@@ -22,6 +22,33 @@ final class SableShadowBridge {
     private SableShadowBridge() {
     }
 
+    static boolean renderSubLevelSingleBlocks(
+            Object level,
+            Object shadowModelView,
+            Object shadowProjection,
+            double cameraX,
+            double cameraY,
+            double cameraZ,
+            float partialTick) {
+        if (!(level instanceof ClientLevel clientLevel)
+                || !(shadowModelView instanceof Matrix4f modelView)
+                || !(shadowProjection instanceof Matrix4f projection)) {
+            return false;
+        }
+        ClientSubLevelContainer container = getClientContainer(clientLevel);
+        if (container == null || container.getAllSubLevels().isEmpty()) {
+            return false;
+        }
+
+        // Vanilla/ReachAround queue single-block layers in renderSectionLayer;
+        // their normal LevelRenderer.renderLevel tail is absent in Iris shadows.
+        // The native flush consumes only that queue, skips chunked sublevels,
+        // and clears it so opaque and translucent layers keep separate timing.
+        getSubLevelDispatcher().renderAfterSections(container.getAllSubLevels(),
+            cameraX, cameraY, cameraZ, modelView, projection, partialTick);
+        return true;
+    }
+
     static boolean renderSubLevelBlockEntities(
             Object level,
             Object renderBuffers,

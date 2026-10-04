@@ -44,6 +44,8 @@ The development environment targets **Minecraft 1.21.1 / NeoForge**. Versions we
 | Sable | 2.0.6+mc1.21.1 |
 | Iris Flywheel Compat | 1.21.1+2.4.0-release |
 
+The minimum required NeoForge version is **21.1.228**, the lowest version satisfying all pinned mods and their nested dependencies. Aeronautics 1.3.2 and Sable 2.0.6 set this floor. `neo_version_range` controls the runtime requirement separately from the development version in `neo_version`.
+
 Iris remains on the latest published 1.21.1 beta, which supports Sodium 0.8. Create stays on the existing 6.0.11 development line; the latest public release is 6.0.10. Flywheel stays on the latest stable 1.0.6. Sable 2.0.6 requires Veil 4.3.2 or newer, satisfied by the explicit Veil 4.5.1 dependency. Veil and Sable remain optional integrations in this mod.
 
 Upstream references: [Iris](https://modrinth.com/mod/iris/version/KduFYu4t), [Sodium](https://modrinth.com/mod/sodium/version/uMOpc5uV), [Veil](https://github.com/FoundryMC/Veil/releases/tag/mc1.21.1-4.5.1-neoforge), [Create build metadata](https://maven.createmod.net/com/simibubi/create/create-1.21.1/6.0.11-313/create-1.21.1-6.0.11-313.pom), [Aeronautics](https://modrinth.com/mod/create-aeronautics/versions), [Sable](https://modrinth.com/mod/sable/versions).

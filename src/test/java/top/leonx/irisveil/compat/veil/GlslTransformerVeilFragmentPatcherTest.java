@@ -111,6 +111,64 @@ class GlslTransformerVeilFragmentPatcherTest {
     }
 
     @Test
+    void preservesSharedSamplerHelpersUsedForNormalAndSpecularMaps() {
+        String fragment = """
+            #version 330 compatibility
+            uniform sampler2D gcolor;
+            uniform sampler2D normals;
+            uniform sampler2D specular;
+
+            vec4 textureParallax(sampler2D tex, vec2 uv, vec2 dx, vec2 dy) {
+                return textureGrad(tex, uv, dx, dy);
+            }
+
+            void main() {
+                vec4 albedo = texture(gcolor, vec2(0.5));
+                vec4 normalData = textureParallax(normals, vec2(0.5), vec2(0.0), vec2(0.0));
+                vec4 specularData = textureParallax(specular, vec2(0.5), vec2(0.0), vec2(0.0));
+                gl_FragData[0] = albedo + normalData + specularData;
+            }
+            """;
+
+        String patched = new GlslTransformerVeilFragmentPatcher().patch(
+            fragment, TEXTURED_VEIL_FRAGMENT, true);
+
+        assertAll(
+            () -> assertTrue(patched.contains("return textureGrad(tex, uv, dx, dy);"), patched),
+            () -> assertTrue(patched.contains("vec4 albedo = vec4(_veil_fragColor.rgb, 1.0"), patched),
+            () -> assertTrue(patched.contains("textureParallax(normals,"), patched),
+            () -> assertTrue(patched.contains("textureParallax(specular,"), patched)
+        );
+    }
+
+    @Test
+    void preservesSamplerParameterThatShadowsTheGlobalAlbedoSampler() {
+        String fragment = """
+            #version 330 compatibility
+            uniform sampler2D tex;
+            uniform sampler2D normals;
+
+            vec4 readTexture(sampler2D tex, vec2 uv) {
+                return texture(tex, uv);
+            }
+
+            void main() {
+                vec4 albedo = texture(tex, vec2(0.5));
+                gl_FragData[0] = albedo + readTexture(normals, vec2(0.5));
+            }
+            """;
+
+        String patched = new GlslTransformerVeilFragmentPatcher().patch(
+            fragment, TEXTURED_VEIL_FRAGMENT, false);
+
+        assertAll(
+            () -> assertTrue(patched.contains("return texture(tex, uv);"), patched),
+            () -> assertTrue(patched.contains("vec4 albedo = _veil_fragColor;"), patched),
+            () -> assertTrue(patched.contains("texture(tex, _veil_texCoord0)"), patched)
+        );
+    }
+
+    @Test
     void removesLayoutQualifierFromRenamedVeilConstGlobals() {
         String veilFragment = """
             #version 150

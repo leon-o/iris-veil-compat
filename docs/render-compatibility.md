@@ -127,6 +127,45 @@ redundant wrapper-tail flush was removed. Its renderer class is byte-for-byte
 identical to the audited 1.3.0 class. The bypass covers the native entity flush,
 keeping Diagram entities and the rotating propeller in their offscreen view.
 
+## Staff, Spring, single-block terrain, and Veil Iris Lights
+
+Creative Physics Staff submits its opaque beam after Iris has already evaluated
+deferred lighting. Binding another framebuffer cannot supply the missed lighting
+pass. The explicit `BeforeDeferredWorldRenderers` adapter runs its existing draw
+before `beginTranslucents`, after solid hand rendering has restored the world
+matrices. Only a successfully completed early call suppresses the same frame's
+late call. Shader-disabled, shadow, and offscreen rendering retain their native
+paths. This is a reusable registration point for identified effects, not an
+automatic redirection of every late draw.
+
+Ground block-entity shadows use NeoForge's public visible-block-entity iterator
+to supplement Iris's list. Sodium does not populate the vanilla section list
+that Iris originally reads; the public iterator uses its current shadow lists.
+Entries are deduplicated by identity, and Iris retains its lighting and distance
+filters. Sable's separate single-block terrain queue is flushed after each
+requested shadow terrain layer and after the custom Levitite base layer.
+
+Veil Iris Lights 1.4.6 also replaces Veil geometry shaders. In the reproduced
+Photon failure, the rope's fragment program consumed `_veil_lightmapColor`
+initialized to zero while the vertex program assigned a different variable.
+The actual texture was brown, vertex color was white, and face-brightness values
+were all one. An optional cache-boundary mixin prevents VIL's second geometry
+replacement while this mod's Iris pipeline is active. Its independent light
+pass and `veil:light/*` shaders remain outside that suppression.
+
+Fragment composition also distinguishes global albedo samplers from helper
+parameters named `tex`, preserving normal/specular sampling. Shaderpack helpers
+that resample the base texture may still own that color calculation; this fix
+does not promise native Veil color modulation through every pack-specific helper.
+
+The regression evidence is under `build/veiltest-regressions-20261004/`.
+The final build passes 76 tests. Agent-observed checks cover Staff beams in
+Photon and Nostalgia, single-block shadows, and rope geometry/material inputs.
+The user subsequently tested the final development client, including the last
+coexistence changes, and confirmed no issues. This final acceptance is distinct
+from the earlier GPU captures; no post-fix capture of VIL's independent light
+pass was collected. The original external save and installed JAR were untouched.
+
 ## Verification evidence
 
 Evidence is kept under `build/` and is not bundled in the release JAR. Tests and

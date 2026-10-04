@@ -7,7 +7,10 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import org.joml.Matrix4f;
 
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public interface SubLevelRenderDispatcher {
     Matrix4f ORIGINAL_POSE = new Matrix4f().translation(4.0f, 5.0f, 6.0f);
@@ -25,6 +28,15 @@ public interface SubLevelRenderDispatcher {
         double cameraZ,
         float partialTick);
 
+    void renderAfterSections(
+        Iterable<ClientSubLevel> subLevels,
+        double cameraX,
+        double cameraY,
+        double cameraZ,
+        Matrix4f modelView,
+        Matrix4f projection,
+        float partialTick);
+
     final class TestHooks {
         public static boolean renderBlockEntitiesCalled;
         public static Iterable<?> lastSubLevels;
@@ -34,6 +46,11 @@ public interface SubLevelRenderDispatcher {
         public static double lastCameraY;
         public static double lastCameraZ;
         public static float lastPartialTick;
+        public static int afterSectionsCalls;
+        public static Matrix4f lastModelView;
+        public static Matrix4f lastProjection;
+        public static final Set<String> pendingSingleBlockLayers = new LinkedHashSet<>();
+        public static final List<String> flushedSingleBlockLayers = new ArrayList<>();
 
         private TestHooks() {
         }
@@ -47,10 +64,38 @@ public interface SubLevelRenderDispatcher {
             lastCameraY = 0.0;
             lastCameraZ = 0.0;
             lastPartialTick = 0.0f;
+            afterSectionsCalls = 0;
+            lastModelView = null;
+            lastProjection = null;
+            pendingSingleBlockLayers.clear();
+            flushedSingleBlockLayers.clear();
         }
     }
 
     final class TestDispatcher implements SubLevelRenderDispatcher {
+        @Override
+        public void renderAfterSections(
+                Iterable<ClientSubLevel> subLevels,
+                double cameraX,
+                double cameraY,
+                double cameraZ,
+                Matrix4f modelView,
+                Matrix4f projection,
+                float partialTick) {
+            TestHooks.afterSectionsCalls++;
+            TestHooks.lastSubLevels = subLevels;
+            TestHooks.lastCameraX = cameraX;
+            TestHooks.lastCameraY = cameraY;
+            TestHooks.lastCameraZ = cameraZ;
+            TestHooks.lastModelView = new Matrix4f(modelView);
+            TestHooks.lastProjection = new Matrix4f(projection);
+            TestHooks.lastPartialTick = partialTick;
+            // Native Vanilla/ReachAround semantics: only queued single-block
+            // layers are emitted, then the queue is emptied for the next pass.
+            TestHooks.flushedSingleBlockLayers.addAll(TestHooks.pendingSingleBlockLayers);
+            TestHooks.pendingSingleBlockLayers.clear();
+        }
+
         @Override
         public void renderBlockEntities(
                 Iterable<ClientSubLevel> subLevels,

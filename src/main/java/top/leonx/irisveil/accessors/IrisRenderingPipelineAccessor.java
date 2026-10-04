@@ -10,8 +10,12 @@ import net.minecraft.client.renderer.ShaderInstance;
 
 import java.io.IOException;
 
+import top.leonx.irisveil.compat.iris.BeforeDeferredWorldRenderers;
+
 public interface IrisRenderingPipelineAccessor {
     ProgramSet getProgramSet();
+
+    BeforeDeferredWorldRenderers.Frame irisveil$getBeforeDeferredFrame();
 
     ShaderInstance invokeCreateShader(String name, ProgramSource source, ProgramId programId, AlphaTest fallbackAlpha,
                                       VertexFormat vertexFormat, FogMode fogMode,

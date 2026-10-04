@@ -28,6 +28,8 @@ import net.irisshaders.iris.targets.RenderTargets;
 
 import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.accessors.IrisRenderingPipelineAccessor;
+import top.leonx.irisveil.compat.iris.BeforeDeferredWorldRenderBridge;
+import top.leonx.irisveil.compat.iris.BeforeDeferredWorldRenderers;
 import top.leonx.irisveil.compat.veil.CompatFramebufferTargets;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 
@@ -47,9 +49,35 @@ public abstract class MixinIrisRenderingPipeline implements IrisRenderingPipelin
     @Unique
     private Map<String, GlFramebuffer> irisveil$compatGbufferTargets;
 
+    @Unique
+    private final BeforeDeferredWorldRenderers.Frame irisveil$beforeDeferredFrame =
+        BeforeDeferredWorldRenderers.INSTANCE.newFrame();
+
     @Override
     public ProgramSet getProgramSet() {
         return programSet;
+    }
+
+    @Override
+    public BeforeDeferredWorldRenderers.Frame irisveil$getBeforeDeferredFrame() {
+        return irisveil$beforeDeferredFrame;
+    }
+
+    @Inject(method = "beginLevelRendering", at = @At("HEAD"), remap = false)
+    private void irisveil$beginWorldFrame(CallbackInfo ci) {
+        irisveil$beforeDeferredFrame.begin();
+    }
+
+    @Inject(method = "beginTranslucents", at = @At("HEAD"), remap = false)
+    private void irisveil$renderBeforeDeferred(CallbackInfo ci) {
+        // Iris' caller has rendered the solid hand and restored world matrices.
+        // Submit opaque effects before the depth copy and deferred lighting.
+        BeforeDeferredWorldRenderBridge.render((IrisRenderingPipeline) (Object) this, irisveil$beforeDeferredFrame);
+    }
+
+    @Inject(method = {"finalizeLevelRendering", "destroy"}, at = @At("HEAD"), remap = false)
+    private void irisveil$endWorldFrame(CallbackInfo ci) {
+        irisveil$beforeDeferredFrame.end();
     }
 
     @Inject(method = "<init>", at = @At("TAIL"), remap = false)

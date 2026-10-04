@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "top.leonx.irisveil.compat.veilirislights.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MixinIrisVeilShaderCache"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

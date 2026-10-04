@@ -147,10 +147,11 @@ public class GlslTransformerVeilFragmentPatcher {
             ? "vec4(_veil_fragColor.rgb, 1.0)"
             : "_veil_fragColor";
 
+        Set<String> baseSamplers = baseTextureUniforms(tree);
         var textureCalls = new ArrayList<Expression>();
         root.nodeIndex.getStream(FunctionCallExpression.class)
             .filter(this::isTextureFunctionCall)
-            .filter(this::usesBaseTextureSampler)
+            .filter(call -> usesBaseTextureSampler(call, baseSamplers))
             .forEach(textureCalls::add);
 
         if (!textureCalls.isEmpty()) {
@@ -167,13 +168,23 @@ public class GlslTransformerVeilFragmentPatcher {
         return functionName != null && TEXTURE_FUNCTIONS.contains(functionName.getName());
     }
 
-    private boolean usesBaseTextureSampler(FunctionCallExpression call) {
+    private static boolean usesBaseTextureSampler(FunctionCallExpression call, Set<String> baseSamplers) {
         if (call.getParameters().isEmpty()) {
             return false;
         }
 
         String sampler = ASTPrinter.printSimple(call.getParameters().getFirst()).trim();
-        return BASE_TEXTURE_SAMPLERS.contains(sampler);
+        if (!baseSamplers.contains(sampler)) {
+            return false;
+        }
+
+        // Shared POM helpers often call their sampler parameter "tex". That
+        // parameter can receive normals/specular as well as the albedo texture,
+        // even when a global albedo uniform has the same name.
+        FunctionDefinition function = call.getAncestor(FunctionDefinition.class);
+        return function == null || function.getFunctionPrototype().getParameters().stream()
+            .noneMatch(parameter -> parameter.getName() != null
+                && sampler.equals(parameter.getName().getName()));
     }
 
     @SuppressWarnings("unchecked")
@@ -269,6 +280,11 @@ public class GlslTransformerVeilFragmentPatcher {
 
     private @Nullable String detectBaseSampler(String source) {
         TranslationUnit tree = irisDeclarationTransformer.parseSeparateTranslationUnit(source);
+        Set<String> samplers = baseTextureUniforms(tree);
+        return BASE_TEXTURE_SAMPLERS.stream().filter(samplers::contains).findFirst().orElse(null);
+    }
+
+    private static Set<String> baseTextureUniforms(TranslationUnit tree) {
         Set<String> samplers = new LinkedHashSet<>();
         for (var child : tree.getChildren()) {
             if (child instanceof DeclarationExternalDeclaration external
@@ -277,10 +293,11 @@ public class GlslTransformerVeilFragmentPatcher {
                 && "sampler2D".equals(ASTPrinter.printSimple(declaration.getType().getTypeSpecifier()).trim())) {
                 declaration.getMembers().stream()
                     .map(member -> member.getName().getName())
+                    .filter(BASE_TEXTURE_SAMPLERS::contains)
                     .forEach(samplers::add);
             }
         }
-        return BASE_TEXTURE_SAMPLERS.stream().filter(samplers::contains).findFirst().orElse(null);
+        return samplers;
     }
 
     private static void removeUniformDeclarations(TranslationUnit tree, Set<String> names) {

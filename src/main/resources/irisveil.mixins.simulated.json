@@ -8,7 +8,8 @@
     "MixinEndSeaRenderer",
     "MixinEndSeaShadowRenderer",
     "MixinPlungerLauncherItemRenderer",
-    "MixinPhysicsStaffItemRenderer"
+    "MixinPhysicsStaffItemRenderer",
+    "MixinPhysicsStaffClientHandler"
   ],
   "injectors": {
     "defaultRequire": 1
