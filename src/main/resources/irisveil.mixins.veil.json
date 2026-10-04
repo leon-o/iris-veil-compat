@@ -5,6 +5,9 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "MixinDirectShaderCompiler",
+    "MixinLevititeBufferSource",
+    "MixinLevititeRenderStage",
+    "MixinShaderProgramWrapper",
     "MixinShaderProgramShard"
   ],
   "injectors": {

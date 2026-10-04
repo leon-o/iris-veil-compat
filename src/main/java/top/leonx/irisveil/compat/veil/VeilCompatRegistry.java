@@ -30,6 +30,11 @@ public final class VeilCompatRegistry {
     private VeilCompatRegistry() {
     }
 
+    public enum WorldRenderPhase {
+        AFTER_TRANSLUCENT,
+        FINAL_COMPOSITE
+    }
+
     public static void excludeShaderReplacement(ResourceLocation shaderPath) {
         excludeShaderReplacement(shaderPath.toString());
     }
@@ -82,13 +87,23 @@ public final class VeilCompatRegistry {
             int[] drawBuffers,
             BooleanSupplier shouldRender,
             WorldRenderCallback callback) {
+        registerWorldRenderHook(id, WorldRenderPhase.AFTER_TRANSLUCENT, drawBuffers, shouldRender, callback);
+    }
+
+    public static void registerWorldRenderHook(
+            String id,
+            WorldRenderPhase phase,
+            int[] drawBuffers,
+            BooleanSupplier shouldRender,
+            WorldRenderCallback callback) {
         Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(phase, "phase");
         Objects.requireNonNull(drawBuffers, "drawBuffers");
         Objects.requireNonNull(shouldRender, "shouldRender");
         Objects.requireNonNull(callback, "callback");
 
         int[] drawBuffersCopy = drawBuffers.clone();
-        WorldRenderHookEntry entry = new WorldRenderHookEntry(id, drawBuffersCopy, shouldRender, callback);
+        WorldRenderHookEntry entry = new WorldRenderHookEntry(id, phase, drawBuffersCopy, shouldRender, callback);
         if (WORLD_RENDER_HOOKS_BY_ID.putIfAbsent(id, entry) == null) {
             WORLD_RENDER_HOOKS.add(entry);
         }
@@ -99,11 +114,32 @@ public final class VeilCompatRegistry {
             Object gameRenderer,
             CompatFramebufferBinder framebufferBinder,
             Runnable restoreMainTarget) {
+        renderWorldHooks(WorldRenderPhase.AFTER_TRANSLUCENT, camera, gameRenderer, framebufferBinder, restoreMainTarget);
+    }
+
+    public static void renderWorldHooks(
+            WorldRenderPhase phase,
+            Object camera,
+            Object gameRenderer,
+            CompatFramebufferBinder framebufferBinder,
+            Runnable restoreMainTarget) {
+        renderWorldHooks(phase, camera, gameRenderer, framebufferBinder, restoreMainTarget, Runnable::run);
+    }
+
+    public static void renderWorldHooks(
+            WorldRenderPhase phase,
+            Object camera,
+            Object gameRenderer,
+            CompatFramebufferBinder framebufferBinder,
+            Runnable restoreMainTarget,
+            WorldRenderScope renderScope) {
+        Objects.requireNonNull(phase, "phase");
         Objects.requireNonNull(framebufferBinder, "framebufferBinder");
         Objects.requireNonNull(restoreMainTarget, "restoreMainTarget");
+        Objects.requireNonNull(renderScope, "renderScope");
 
         for (WorldRenderHookEntry hook : WORLD_RENDER_HOOKS) {
-            hook.render(camera, gameRenderer, framebufferBinder, restoreMainTarget);
+            hook.render(phase, camera, gameRenderer, framebufferBinder, restoreMainTarget, renderScope);
         }
     }
 
@@ -123,15 +159,22 @@ public final class VeilCompatRegistry {
 
     private record WorldRenderHookEntry(
             String id,
+            WorldRenderPhase phase,
             int[] drawBuffers,
             BooleanSupplier shouldRender,
             WorldRenderCallback callback) {
         private void render(
+                WorldRenderPhase activePhase,
                 Object camera,
                 Object gameRenderer,
                 CompatFramebufferBinder framebufferBinder,
-                Runnable restoreMainTarget) {
+                Runnable restoreMainTarget,
+                WorldRenderScope renderScope) {
             try {
+                if (phase != activePhase) {
+                    return;
+                }
+
                 if (!shouldRender.getAsBoolean()) {
                     return;
                 }
@@ -141,7 +184,7 @@ public final class VeilCompatRegistry {
                 }
 
                 try {
-                    callback.render(camera, gameRenderer);
+                    renderScope.run(() -> callback.render(camera, gameRenderer));
                 } finally {
                     restoreMainTarget.run();
                 }
@@ -154,6 +197,11 @@ public final class VeilCompatRegistry {
     @FunctionalInterface
     public interface CompatFramebufferBinder {
         boolean bind(int[] drawBuffers);
+    }
+
+    @FunctionalInterface
+    public interface WorldRenderScope {
+        void run(Runnable callback);
     }
 
     @FunctionalInterface

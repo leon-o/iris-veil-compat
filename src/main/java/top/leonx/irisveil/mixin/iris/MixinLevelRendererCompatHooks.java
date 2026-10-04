@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.accessors.IrisRenderingPipelineAccessor;
+import top.leonx.irisveil.compat.veil.CompatWorldRenderContext;
 import top.leonx.irisveil.compat.veil.VeilCompatRegistry;
 
 @Mixin(LevelRenderer.class)
@@ -37,15 +38,19 @@ public class MixinLevelRendererCompatHooks {
         Matrix4f projection,
         CallbackInfo ci) {
         if (!IrisVeilCompat.isShaderPackInUse()) {
+            CompatWorldRenderContext.clear();
             return;
         }
 
         WorldRenderingPipeline pipeline = Iris.getPipelineManager().getPipelineNullable();
         if (!(pipeline instanceof IrisRenderingPipelineAccessor accessor)) {
+            CompatWorldRenderContext.clear();
             return;
         }
 
+        CompatWorldRenderContext.capture(camera, gameRenderer);
         VeilCompatRegistry.renderWorldHooks(
+            VeilCompatRegistry.WorldRenderPhase.AFTER_TRANSLUCENT,
             camera,
             gameRenderer,
             drawBuffers -> {

@@ -7,6 +7,8 @@ import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.compat.veil.VeilCompatRegistry;
 
 import java.lang.reflect.Method;
+import java.util.Objects;
+import java.util.function.IntConsumer;
 
 public class SimulatedEndSeaCompat {
     private static final ResourceLocation END_SEA_SHADER =
@@ -18,6 +20,8 @@ public class SimulatedEndSeaCompat {
     private static final String CAMERA_CLASS = "net.minecraft.client.Camera";
     private static final String GAME_RENDERER_CLASS = "net.minecraft.client.renderer.GameRenderer";
     private static final int[] END_SEA_FINAL_COMPOSITE_DRAW_BUFFERS = {0};
+    private static final ThreadLocal<Boolean> RENDERING_FINAL_COMPOSITE_END_SEA =
+        ThreadLocal.withInitial(() -> false);
 
     private static volatile @Nullable Method renderMethod;
     private static volatile boolean renderLookupFailed;
@@ -35,11 +39,6 @@ public class SimulatedEndSeaCompat {
         VeilCompatRegistry.registerExternalRenderState(
             "simulated:end_sea_shadow",
             SimulatedEndSeaCompat::isRenderingEndSeaShadowMap);
-        VeilCompatRegistry.registerWorldRenderHook(
-            "simulated:end_sea",
-            finalCompositeDrawBuffers(),
-            SimulatedEndSeaCompat::shouldRenderWorldHook,
-            SimulatedEndSeaCompat::render);
         registered = true;
     }
 
@@ -49,12 +48,16 @@ public class SimulatedEndSeaCompat {
             return false;
         }
 
+        boolean previous = RENDERING_FINAL_COMPOSITE_END_SEA.get();
+        RENDERING_FINAL_COMPOSITE_END_SEA.set(true);
         try {
             method.invoke(null, camera, gameRenderer);
             return true;
         } catch (ReflectiveOperationException | LinkageError e) {
             IrisVeilCompat.LOGGER.warn("IrisVeilCompat: failed to invoke Simulated End Sea renderer", e);
             return false;
+        } finally {
+            RENDERING_FINAL_COMPOSITE_END_SEA.set(previous);
         }
     }
 
@@ -72,13 +75,53 @@ public class SimulatedEndSeaCompat {
         }
     }
 
+    public static void prepareShadowMapRenderState() {
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(true);
+    }
+
     public static int[] finalCompositeDrawBuffers() {
         return END_SEA_FINAL_COMPOSITE_DRAW_BUFFERS.clone();
     }
 
-    public static void prepareShadowMapRenderState() {
-        RenderSystem.enableDepthTest();
-        RenderSystem.depthMask(true);
+    public static boolean isRenderingFinalCompositeEndSea() {
+        return RENDERING_FINAL_COMPOSITE_END_SEA.get();
+    }
+
+    static void withFinalCompositeEndSeaRender(Runnable callback) {
+        boolean previous = RENDERING_FINAL_COMPOSITE_END_SEA.get();
+        RENDERING_FINAL_COMPOSITE_END_SEA.set(true);
+        try {
+            Objects.requireNonNull(callback, "callback").run();
+        } finally {
+            RENDERING_FINAL_COMPOSITE_END_SEA.set(previous);
+        }
+    }
+
+    public static boolean shouldDrawEndSeaIntoBoundFramebuffer(boolean shaderPackInUse, boolean compatibleFramebufferAvailable) {
+        return shaderPackInUse && compatibleFramebufferAvailable;
+    }
+
+    public static void drawIntoWorldColor(Runnable bindTarget, Runnable draw, Runnable restoreTarget) {
+        Objects.requireNonNull(bindTarget, "bindTarget");
+        Objects.requireNonNull(draw, "draw");
+        Objects.requireNonNull(restoreTarget, "restoreTarget");
+        try {
+            bindTarget.run();
+            draw.run();
+        } finally {
+            restoreTarget.run();
+        }
+    }
+
+    public static void applyEndSeaBoundFramebufferShader(
+        Runnable bindShader,
+        Runnable applyDefaultUniforms,
+        IntConsumer bindSamplers
+    ) {
+        Objects.requireNonNull(bindShader, "bindShader").run();
+        Objects.requireNonNull(applyDefaultUniforms, "applyDefaultUniforms").run();
+        Objects.requireNonNull(bindSamplers, "bindSamplers").accept(0);
     }
 
     private static boolean shouldRenderWorldHook() {

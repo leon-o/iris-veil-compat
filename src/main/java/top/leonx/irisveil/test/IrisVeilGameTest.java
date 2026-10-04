@@ -71,14 +71,13 @@ public class IrisVeilGameTest {
     public void endSeaFinalCompositeWritesToColortexZero(GameTestHelper helper) {
         helper.succeedWhen(() -> {
             int[] drawBuffers = SimulatedEndSeaCompat.finalCompositeDrawBuffers();
-            helper.assertTrue(
-                drawBuffers.length == 1 && drawBuffers[0] == 0,
-                "End Sea final composite should write to shaderpack colortex0");
+            helper.assertTrue(drawBuffers.length == 1, "End Sea final composite should write exactly one color target");
+            helper.assertTrue(drawBuffers[0] == 0, "End Sea final composite should write Iris colortex0");
 
-            drawBuffers[0] = 7;
+            drawBuffers[0] = 3;
             helper.assertTrue(
                 SimulatedEndSeaCompat.finalCompositeDrawBuffers()[0] == 0,
-                "End Sea draw buffer contract should not be mutable by callers");
+                "End Sea final composite draw buffer list should be defensive-copied");
         });
     }
 
