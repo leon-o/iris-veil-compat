@@ -3,8 +3,9 @@ package top.leonx.irisveil.compat.simulated.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -24,7 +25,7 @@ import top.leonx.irisveil.compat.veil.NativeShaderProjection;
 @Pseudo
 @Mixin(targets = "dev.simulated_team.simulated.content.end_sea.EndSeaRenderer", remap = false)
 public class MixinEndSeaRenderer {
-    @Redirect(
+    @WrapOperation(
         method = "renderLayers",
         at = @At(
             value = "INVOKE",
@@ -32,18 +33,18 @@ public class MixinEndSeaRenderer {
         ),
         require = 0
     )
-    private static void irisveil$drawEndSeaIntoBoundFramebuffer(MeshData meshData) {
+    private static void irisveil$drawEndSeaIntoBoundFramebuffer(MeshData meshData, Operation<Void> original) {
         var pipeline = Iris.getPipelineManager().getPipelineNullable();
         if (!SimulatedEndSeaCompat.shouldDrawEndSeaIntoBoundFramebuffer(
             IrisVeilCompat.isShaderPackInUse(),
             pipeline instanceof IrisRenderingPipelineAccessor)) {
-            BufferUploader.drawWithShader(meshData);
+            original.call(meshData);
             return;
         }
 
         ShaderProgram shader = VeilRenderSystem.getShader();
         if (shader == null) {
-            BufferUploader.drawWithShader(meshData);
+            original.call(meshData);
             return;
         }
 

@@ -2,6 +2,9 @@
 - Replaced the mod icon and added it to the README.
 - Updated the Minecraft 1.21.1 development dependencies to NeoForge 21.1.255, Veil 4.5.1, Sodium 0.8.13, Create 6.0.11-313, Ponder 1.0.87, Create: Aeronautics 1.3.2, and Sable 2.0.6.
 - Retained the latest published 1.21.1 Iris beta, stable Flywheel 1.0.6, and Iris Flywheel Compat 2.4.0.
+- Integrated Levitite's native four-point tessellation and deformation into Iris's opaque, translucent, and shadow programs, replacing the native replay after the final pass.
+- Preserved shaderpack albedo sampling and post-processing while forwarding Aeronautics' physics, noise, and ghost effects; removed redundant native lighting and fog.
+- Passed 62 unit tests, verified actual draw and post-processing connections in a BSL 10.0 GPU capture, and exercised Nostalgia 5.1 with POM at 75% rendering scale. Validation is limited to the tested fixtures and settings.
 
 ### 0.3.0
 - Fixed End Sea rendering issues when using Iris shaderpacks.

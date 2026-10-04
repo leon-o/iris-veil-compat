@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import top.leonx.irisveil.IrisVeilCompat;
+import top.leonx.irisveil.compat.aeronautics.LevititeRenderContext;
 import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 import top.leonx.irisveil.compat.veil.RenderStateManager;
 import top.leonx.irisveil.compat.veil.VeilDefaultUniforms;
@@ -35,6 +36,9 @@ public class MixinShaderProgramShard {
 
     @Unique
     private volatile boolean irisveil$cachedIsShadow;
+
+    @Unique
+    private volatile boolean irisveil$cachedGhostPass;
 
     @Unique
     private volatile int irisveil$lastShaderPackGen = -1;
@@ -100,14 +104,23 @@ public class MixinShaderProgramShard {
 
     @Unique
     private ShaderInstance irisveil$getOrCreateIrisShader(ResourceLocation shaderPath) {
+        // Optional native paths can become available after an earlier shader was
+        // cached, or disable themselves after a failure. Respect their current state.
+        if (!IrisVeilShaderCache.shouldReplaceShader(shaderPath)) {
+            irisveil$cachedIrisShader = null;
+            return null;
+        }
         int currentGen = IrisVeilShaderCache.getShaderPackGeneration();
         boolean isShadow = RenderStateManager.isRenderingShadow();
+        boolean isGhostPass = LevititeRenderContext.isGhostPass();
         int externalRenderStateGen = IrisVeilShaderCache.getExternalRenderStateGeneration();
 
         // Shaderpack changed OR render pass changed (shadow ↔ non-shadow)
+        // OR the shared Levitite shard switches between base/ghost layers
         // OR an external render state changed → create or bypass the correct shader.
         if (irisveil$lastShaderPackGen != currentGen
             || irisveil$cachedIsShadow != isShadow
+            || irisveil$cachedGhostPass != isGhostPass
             || irisveil$cachedExternalRenderStateGen != externalRenderStateGen) {
             irisveil$cachedIrisShader = null;
         }
@@ -115,6 +128,8 @@ public class MixinShaderProgramShard {
         // Use cached result only if valid (non-null) and state matches
         if (irisveil$cachedIrisShader != null
             && irisveil$lastShaderPackGen == currentGen
+            && irisveil$cachedIsShadow == isShadow
+            && irisveil$cachedGhostPass == isGhostPass
             && irisveil$cachedExternalRenderStateGen == externalRenderStateGen) {
             return irisveil$cachedIrisShader;
         }
@@ -122,6 +137,7 @@ public class MixinShaderProgramShard {
         irisveil$cachedIrisShader = IrisVeilShaderCache.getOrCreate(shaderPath);
         irisveil$lastShaderPackGen = currentGen;
         irisveil$cachedIsShadow = isShadow;
+        irisveil$cachedGhostPass = isGhostPass;
         irisveil$cachedExternalRenderStateGen = externalRenderStateGen;
         return irisveil$cachedIrisShader;
     }

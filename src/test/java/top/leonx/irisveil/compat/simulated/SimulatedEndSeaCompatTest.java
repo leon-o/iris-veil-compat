@@ -12,28 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SimulatedEndSeaCompatTest {
     @Test
-    void finalCompositeRenderScopeIsOnlyActiveDuringCallback() {
-        assertFalse(SimulatedEndSeaCompat.isRenderingFinalCompositeEndSea());
-
-        SimulatedEndSeaCompat.withFinalCompositeEndSeaRender(
-            () -> assertTrue(SimulatedEndSeaCompat.isRenderingFinalCompositeEndSea()));
-
-        assertFalse(SimulatedEndSeaCompat.isRenderingFinalCompositeEndSea());
-    }
-
-    @Test
-    void finalCompositeRenderScopeIsClearedAfterFailure() {
-        RuntimeException thrown = assertThrows(RuntimeException.class, () ->
-            SimulatedEndSeaCompat.withFinalCompositeEndSeaRender(() -> {
-                assertTrue(SimulatedEndSeaCompat.isRenderingFinalCompositeEndSea());
-                throw new RuntimeException("boom");
-            }));
-
-        assertEquals("boom", thrown.getMessage());
-        assertFalse(SimulatedEndSeaCompat.isRenderingFinalCompositeEndSea());
-    }
-
-    @Test
     void endSeaKeepsVanillaDrawWhenShaderpackIsInactive() {
         assertFalse(SimulatedEndSeaCompat.shouldDrawEndSeaIntoBoundFramebuffer(false, true));
     }
@@ -66,17 +44,6 @@ class SimulatedEndSeaCompatTest {
             () -> calls.add("draw"),
             () -> calls.add("restore")));
         assertEquals(List.of("restore"), calls);
-    }
-
-    @Test
-    void endSeaFinalCompositeWritesToColortexZero() {
-        int[] drawBuffers = SimulatedEndSeaCompat.finalCompositeDrawBuffers();
-
-        assertEquals(1, drawBuffers.length);
-        assertEquals(0, drawBuffers[0]);
-
-        drawBuffers[0] = 3;
-        assertEquals(0, SimulatedEndSeaCompat.finalCompositeDrawBuffers()[0]);
     }
 
     @Test

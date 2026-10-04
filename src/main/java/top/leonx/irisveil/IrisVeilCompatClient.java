@@ -11,7 +11,6 @@ import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import top.leonx.irisveil.compat.simulated.SimulatedEndSeaCompat;
 import top.leonx.irisveil.compat.simulated.SimulatedDiagramCompat;
-import top.leonx.irisveil.compat.aeronautics.AeronauticsLevititeCompat;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = IrisVeilCompat.MODID, dist = Dist.CLIENT)
@@ -29,7 +28,6 @@ public class IrisVeilCompatClient {
     static void onClientSetup(FMLClientSetupEvent event) {
         SimulatedEndSeaCompat.registerCompat();
         SimulatedDiagramCompat.registerCompat();
-        AeronauticsLevititeCompat.registerCompat();
         IrisVeilCompat.LOGGER.info("HELLO FROM CLIENT SETUP");
         IrisVeilCompat.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
     }

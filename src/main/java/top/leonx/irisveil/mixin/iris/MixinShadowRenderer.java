@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import top.leonx.irisveil.compat.aeronautics.LevititeShadowCompat;
 import top.leonx.irisveil.compat.sable.SableShadowCompat;
 import top.leonx.irisveil.compat.veil.RenderStateManager;
 
@@ -36,6 +37,10 @@ public abstract class MixinShadowRenderer {
     @Final
     @Shadow
     private boolean shouldRenderBlockEntities;
+
+    @Final
+    @Shadow
+    private boolean shouldRenderTerrain;
 
     @Inject(method = "renderShadows", at = @At("HEAD"))
     private void irisveil$onShadowPassStart(
@@ -73,7 +78,29 @@ public abstract class MixinShadowRenderer {
         irisveil$renderSableShadowBlockEntities(levelRendererAccessor);
     }
 
-    @Inject(method = "renderShadows", at = @At("TAIL"))
+    @Inject(
+        method = "renderShadows",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/irisshaders/iris/shadows/ShadowRenderer;copyPreTranslucentDepth(Lnet/irisshaders/iris/mixin/LevelRendererAccessor;)V",
+            shift = At.Shift.BEFORE))
+    private void irisveil$renderLevititeShadowTerrain(
+            LevelRendererAccessor levelRendererAccessor,
+            Camera camera,
+            CallbackInfo ci) {
+        if (!shouldRenderTerrain) {
+            return;
+        }
+        // Iris dispatches ordinary terrain layers, but not Aero's
+        // AFTER_BLOCK_ENTITIES stage. Reuse its current shadow culling list,
+        // matrices and camera origin before opaque shadow depth is copied.
+        Vector3d cameraPosition = CameraUniforms.getUnshiftedCameraPosition();
+        LevititeShadowCompat.renderBaseLayer(
+            levelRendererAccessor, ShadowRenderer.MODELVIEW, ShadowRenderer.PROJECTION, ShadowRenderer.FRUSTUM,
+            cameraPosition.x(), cameraPosition.y(), cameraPosition.z());
+    }
+
+    @Inject(method = "renderShadows", at = @At("RETURN"))
     private void irisveil$onShadowPassEnd(
             LevelRendererAccessor levelRendererAccessor,
             Camera camera,

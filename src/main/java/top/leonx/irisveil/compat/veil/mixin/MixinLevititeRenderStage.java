@@ -11,33 +11,31 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import foundry.veil.api.client.render.rendertype.VeilRenderType;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import org.joml.Matrix4f;
 
-import top.leonx.irisveil.compat.aeronautics.AeronauticsLevititeCompat;
+import top.leonx.irisveil.IrisVeilCompat;
+import top.leonx.irisveil.compat.aeronautics.LevititeRenderContext;
 
-/** Defer both the chunk/Sable layer and its fixed-buffer flush as one operation. */
+/** Selects the appropriate Iris program while retaining Aeronautics' world render stages. */
 @Pseudo
 @Mixin(targets = "foundry.veil.forge.impl.ForgeRenderTypeStageHandler", remap = false)
 public abstract class MixinLevititeRenderStage {
     @WrapMethod(method = "lambda$onRenderLevelStageEnd$1")
-    private static void irisveil$deferLevitite(
+    private static void irisveil$scopeLevititeLayer(
             ProfilerFiller profiler, RenderLevelStageEvent event,
             MultiBufferSource.BufferSource buffers, RenderType renderType, Operation<Void> original) {
-        String name = VeilRenderType.getName(renderType);
-        if (!AeronauticsLevititeCompat.isLevititeLayer(name)) {
+        if (!IrisVeilCompat.isShaderPackInUse()) {
             original.call(profiler, event, buffers, renderType);
             return;
         }
-        // Native Veil apply binds a world-color FBO even inside Iris shadows.
-        // Until a shadow tessellation bridge exists, do not submit these layers.
-        if (AeronauticsLevititeCompat.shouldSkipShadow(name)) {
+        String name = VeilRenderType.getName(renderType);
+        if (!LevititeRenderContext.isLevititeLayer(name)) {
+            original.call(profiler, event, buffers, renderType);
             return;
         }
-        // Matrices in an event belong to the caller and may be reused before final.
-        RenderLevelStageEvent captured = new RenderLevelStageEvent(event.getStage(), event.getLevelRenderer(),
-            event.getPoseStack(), new Matrix4f(event.getModelViewMatrix()), new Matrix4f(event.getProjectionMatrix()),
-            event.getRenderTick(), event.getPartialTick(), event.getCamera(), event.getFrustum());
-        if (!AeronauticsLevititeCompat.defer(name, () -> original.call(profiler, captured, buffers, renderType))) {
+        // Aero 1.3.2 already registers the base at AFTER_BLOCK_ENTITIES and ghosts
+        // at AFTER_WEATHER. Keep the entire section draw and fixed-buffer flush
+        // inside that phase, before Iris runs its composite/final processing.
+        try (var ignored = LevititeRenderContext.enterLayer(name)) {
             original.call(profiler, event, buffers, renderType);
         }
     }

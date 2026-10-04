@@ -16,6 +16,7 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 
+import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.compat.simulated.SimulatedDiagramCompat;
 
 @Pseudo
@@ -27,7 +28,14 @@ public abstract class MixinSimpleSubLevelGroupRenderer {
             Matrix4f modelView, Matrix4f projection, Vector3d cameraPosition,
             Quaternionf cameraRotation, float partialTick, boolean renderPlayer,
             Operation<Void> original) {
-        // Flush world geometry before switching shader and vertex formats.
+        if (!IrisVeilCompat.isShaderPackInUse()) {
+            original.call(level, subLevels, framebuffer, modelView, projection,
+                cameraPosition, cameraRotation, partialTick, renderPlayer);
+            return;
+        }
+
+        // The native entry flush must not submit world vertices with our bypass
+        // flags. Drain them first, while the caller's shader/vertex state is active.
         var buffers = Minecraft.getInstance().renderBuffers().bufferSource();
         buffers.endBatch();
         boolean previousBypass = ImmediateState.bypass;
@@ -35,14 +43,11 @@ public abstract class MixinSimpleSubLevelGroupRenderer {
         try {
             ImmediateState.bypass = true;
             ImmediateState.skipExtension.set(true);
-            SimulatedDiagramCompat.render(() -> {
-                try {
-                    original.call(level, subLevels, framebuffer, modelView, projection,
-                        cameraPosition, cameraRotation, partialTick, renderPlayer);
-                } finally {
-                    buffers.endBatch();
-                }
-            });
+            // Native renderGroup flushes entities before restoring its camera.
+            // Keep the scope through that flush; do not draw again after restoration.
+            SimulatedDiagramCompat.render(() -> original.call(
+                level, subLevels, framebuffer, modelView, projection,
+                cameraPosition, cameraRotation, partialTick, renderPlayer));
         } finally {
             ImmediateState.bypass = previousBypass;
             ImmediateState.skipExtension.set(previousSkipExtension);

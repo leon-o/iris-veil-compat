@@ -1,30 +1,19 @@
 package top.leonx.irisveil.compat.simulated;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
-import top.leonx.irisveil.IrisVeilCompat;
-import top.leonx.irisveil.compat.veil.VeilCompatRegistry;
-
-import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.function.IntConsumer;
 
-public class SimulatedEndSeaCompat {
+import net.minecraft.resources.ResourceLocation;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+
+import top.leonx.irisveil.compat.veil.VeilCompatRegistry;
+
+public final class SimulatedEndSeaCompat {
     private static final ResourceLocation END_SEA_SHADER =
         ResourceLocation.fromNamespaceAndPath("simulated", "end_sea");
-    private static final String END_SEA_RENDERER =
-        "dev.simulated_team.simulated.content.end_sea.EndSeaRenderer";
     private static final String END_SEA_SHADOW_RENDERER =
         "dev.simulated_team.simulated.content.end_sea.EndSeaShadowRenderer";
-    private static final String CAMERA_CLASS = "net.minecraft.client.Camera";
-    private static final String GAME_RENDERER_CLASS = "net.minecraft.client.renderer.GameRenderer";
-    private static final int[] END_SEA_FINAL_COMPOSITE_DRAW_BUFFERS = {0};
-    private static final ThreadLocal<Boolean> RENDERING_FINAL_COMPOSITE_END_SEA =
-        ThreadLocal.withInitial(() -> false);
-
-    private static volatile @Nullable Method renderMethod;
-    private static volatile boolean renderLookupFailed;
     private static volatile boolean registered;
 
     private SimulatedEndSeaCompat() {
@@ -40,25 +29,6 @@ public class SimulatedEndSeaCompat {
             "simulated:end_sea_shadow",
             SimulatedEndSeaCompat::isRenderingEndSeaShadowMap);
         registered = true;
-    }
-
-    public static boolean render(Object camera, Object gameRenderer) {
-        Method method = getRenderMethod();
-        if (method == null) {
-            return false;
-        }
-
-        boolean previous = RENDERING_FINAL_COMPOSITE_END_SEA.get();
-        RENDERING_FINAL_COMPOSITE_END_SEA.set(true);
-        try {
-            method.invoke(null, camera, gameRenderer);
-            return true;
-        } catch (ReflectiveOperationException | LinkageError e) {
-            IrisVeilCompat.LOGGER.warn("IrisVeilCompat: failed to invoke Simulated End Sea renderer", e);
-            return false;
-        } finally {
-            RENDERING_FINAL_COMPOSITE_END_SEA.set(previous);
-        }
     }
 
     public static boolean isRenderingEndSeaShadowMap() {
@@ -78,24 +48,6 @@ public class SimulatedEndSeaCompat {
     public static void prepareShadowMapRenderState() {
         RenderSystem.enableDepthTest();
         RenderSystem.depthMask(true);
-    }
-
-    public static int[] finalCompositeDrawBuffers() {
-        return END_SEA_FINAL_COMPOSITE_DRAW_BUFFERS.clone();
-    }
-
-    public static boolean isRenderingFinalCompositeEndSea() {
-        return RENDERING_FINAL_COMPOSITE_END_SEA.get();
-    }
-
-    static void withFinalCompositeEndSeaRender(Runnable callback) {
-        boolean previous = RENDERING_FINAL_COMPOSITE_END_SEA.get();
-        RENDERING_FINAL_COMPOSITE_END_SEA.set(true);
-        try {
-            Objects.requireNonNull(callback, "callback").run();
-        } finally {
-            RENDERING_FINAL_COMPOSITE_END_SEA.set(previous);
-        }
     }
 
     public static boolean shouldDrawEndSeaIntoBoundFramebuffer(boolean shaderPackInUse, boolean compatibleFramebufferAvailable) {
@@ -122,32 +74,5 @@ public class SimulatedEndSeaCompat {
         Objects.requireNonNull(bindShader, "bindShader").run();
         Objects.requireNonNull(applyDefaultUniforms, "applyDefaultUniforms").run();
         Objects.requireNonNull(bindSamplers, "bindSamplers").accept(0);
-    }
-
-    private static boolean shouldRenderWorldHook() {
-        return !isRenderingEndSeaShadowMap() && getRenderMethod() != null;
-    }
-
-    private static @Nullable Method getRenderMethod() {
-        Method method = renderMethod;
-        if (method != null) {
-            return method;
-        }
-        if (renderLookupFailed) {
-            return null;
-        }
-
-        try {
-            Class<?> rendererClass = Class.forName(END_SEA_RENDERER);
-            Class<?> cameraClass = Class.forName(CAMERA_CLASS);
-            Class<?> gameRendererClass = Class.forName(GAME_RENDERER_CLASS);
-            method = rendererClass.getMethod("render", cameraClass, gameRendererClass);
-            renderMethod = method;
-            return method;
-        } catch (ReflectiveOperationException | LinkageError e) {
-            renderLookupFailed = true;
-            IrisVeilCompat.LOGGER.debug("IrisVeilCompat: Simulated End Sea renderer is unavailable: {}", e.getMessage());
-            return null;
-        }
     }
 }

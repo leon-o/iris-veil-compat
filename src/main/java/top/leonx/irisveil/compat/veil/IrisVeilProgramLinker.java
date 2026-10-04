@@ -31,6 +31,9 @@ import top.leonx.irisveil.IrisVeilCompat;
 import top.leonx.irisveil.accessors.IrisRenderingPipelineAccessor;
 import top.leonx.irisveil.accessors.ProgramDirectivesAccessor;
 import top.leonx.irisveil.accessors.ProgramSourceAccessor;
+import top.leonx.irisveil.compat.aeronautics.LevititeGbufferBridge;
+import top.leonx.irisveil.compat.aeronautics.LevititeTessellationTransformer;
+import top.leonx.irisveil.compat.aeronautics.LevititeUniformValues;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -40,6 +43,8 @@ import java.util.regex.Pattern;
 
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_VERTEX_SHADER;
+import static org.lwjgl.opengl.GL40C.GL_TESS_CONTROL_SHADER;
+import static org.lwjgl.opengl.GL40C.GL_TESS_EVALUATION_SHADER;
 
 /**
  * Creates Iris {@link ShaderInstance} objects for Veil shaders.
@@ -100,6 +105,13 @@ public class IrisVeilProgramLinker {
             // 4. Read Veil vertex shader source for injection (best-effort, may be null)
             String veilVertSource = readVeilVertexSource(veilProgram);
             String veilFragSource = readVeilFragmentSource(veilProgram);
+            boolean levitite = LevititeGbufferBridge.matches(shaderPath);
+            String veilControl = levitite ? readVeilExtraSource(veilProgram, GL_TESS_CONTROL_SHADER) : null;
+            String veilEvaluation = levitite ? readVeilExtraSource(veilProgram, GL_TESS_EVALUATION_SHADER) : null;
+            if (levitite && (veilVertSource == null || veilFragSource == null
+                    || veilControl == null || veilEvaluation == null)) {
+                throw new IllegalStateException("Levitite requires all four native shader stages");
+            }
 
             if(!format.hasColor() && veilVertSource != null && veilVertSource.contains("Color"))
             {
@@ -143,6 +155,10 @@ public class IrisVeilProgramLinker {
                 return null;
             }
             ProgramSource source = sourceOpt.get();
+            if (levitite && (source.getTessControlSource().isPresent() || source.getTessEvalSource().isPresent()
+                    || source.getGeometrySource().isPresent())) {
+                throw new IllegalArgumentException("Levitite composition does not replace a shaderpack's own geometry/tessellation stages");
+            }
 
             // 6. Get Iris shader sources
             String irisVertSource = source.getVertexSource().orElse(null);
@@ -156,18 +172,21 @@ public class IrisVeilProgramLinker {
             // tracks them separately from gbuffer programs)
             boolean isShadow = programId == ProgramId.Shadow;
             String shaderName = (isShadow ? "shadow_veil_" : "gbuffers_veil_") +
-                shaderPath.getNamespace() + "_" + shaderPath.getPath().replace('/', '_');
+                shaderPath.getNamespace() + "_" + shaderPath.getPath().replace('/', '_')
+                + (levitite ? "_" + programId.name().toLowerCase(java.util.Locale.ROOT) : "");
 
             // 9. Patch Iris vertex shader for Veil format. Shadow programs
             // still need the Veil vertex path; otherwise Rope-like shaders lose
             // their model-space deformation before Iris writes shadow depth.
-            String patchedVertSource = patchVertexSource(
+            String patchedVertSource = levitite ? irisVertSource : patchVertexSource(
                 irisVertSource,
                 veilVertSource,
                 format,
                 shaderName,
                 patcher);
-            if (!isShadow) {
+            if (levitite) {
+                irisFragSource = LevititeTessellationTransformer.patchFragment(irisFragSource, veilFragSource, isShadow);
+            } else if (!isShadow) {
                 irisFragSource = fragmentPatcher.patch(irisFragSource, veilFragSource, useDithering);
             }
 
@@ -180,7 +199,14 @@ public class IrisVeilProgramLinker {
                 irisFragSource = ditherResult.patchedFragment();
             }
 
-            patchedVertSource = JcppProcessor.glslPreprocessSource(patchedVertSource, environmentDefines);
+            // ProgramSet already preprocessed the shaderpack source. Levitite keeps
+            // that vertex source intact until Iris transforms it for TES composition.
+            // Reprocessing it can reject Iris-generated identifiers (e.g. Photon)
+            // and would use a different macro environment from the original load.
+            // Ordinary Veil injection still introduces source that needs this pass.
+            if (!levitite) {
+                patchedVertSource = JcppProcessor.glslPreprocessSource(patchedVertSource, environmentDefines);
+            }
             // Dump patched shader sources to files for debugging
             try {
                 java.nio.file.Path debugDir = java.nio.file.Path.of("patched_shaders");
@@ -219,6 +245,8 @@ public class IrisVeilProgramLinker {
             // 12. Create Iris ShaderInstance — use createShadowShader for shadow
             // passes so the program writes to the shadow map FBO rather than the gbuffer.
             ShaderInstance shader;
+            try (var levititeBuild = levitite ? LevititeGbufferBridge.begin(
+                    shaderName, veilVertSource, veilControl, veilEvaluation) : null) {
             if (isShadow) {
                 shader = irisPipeline.invokeCreateShadowShader(
                     shaderName,
@@ -238,6 +266,11 @@ public class IrisVeilProgramLinker {
                     FogMode.OFF,
                     false, false, false, false, false
                 );
+            }
+            if (levitite) {
+                LevititeGbufferBridge.register(shader, veilProgram.toShaderInstance(),
+                    name -> LevititeUniformValues.getValue(veilProgram.getUniform(name)));
+            }
             }
 
             IrisVeilCompat.LOGGER.info("IrisVeilCompat: created Iris ShaderInstance for '{}'", shaderPath);
@@ -372,6 +405,25 @@ public class IrisVeilProgramLinker {
             return source;
         } catch (Exception e) {
             IrisVeilCompat.LOGGER.debug("IrisVeilCompat: could not read Veil fragment source: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    @Nullable
+    private String readVeilExtraSource(ShaderProgram program, int type) {
+        ProgramDefinition definition = program.getDefinition();
+        if (definition == null) return null;
+        ResourceLocation id = type == GL_TESS_CONTROL_SHADER
+            ? definition.tesselationControl() : definition.tesselationEvaluation();
+        if (id == null) return null;
+        String cached = IrisVeilShaderCache.getProcessedExtraSource(type, id);
+        if (cached != null) return cached;
+        try {
+            ShaderSourceSet set = VeilRenderSystem.renderer().getShaderManager().getSourceSet();
+            String source = readResource(set.getTypeConverter(type).idToFile(id));
+            return source == null ? null : resolveIncludes(source, set, 0);
+        } catch (Exception e) {
+            IrisVeilCompat.LOGGER.debug("Unable to load Levitite stage {}", id, e);
             return null;
         }
     }

@@ -7,40 +7,53 @@ import net.irisshaders.iris.shaderpack.loading.ProgramId;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.resources.ResourceLocation;
 import top.leonx.irisveil.IrisVeilCompat;
+import top.leonx.irisveil.compat.aeronautics.LevititeGbufferBridge;
+import top.leonx.irisveil.compat.aeronautics.LevititeRenderContext;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.Set;
 
 /**
  * Thread-safe cache mapping Veil shader paths to Iris {@link ShaderInstance} objects.
  *
  * <p>Cache entries are keyed by an opaque shaderpack fingerprint that changes
- * whenever Iris reloads its shaders. Entries from previous generations are
- * lazily invalidated when the fingerprint changes.
+ * whenever Iris reloads its shaders. Iris owns the shader instances; the cache
+ * drops its references when those instances close.
  *
  * <p>Auto-classification is implicit: if the Iris {@link IrisVeilProgramLinker}
  * fails to create a program (e.g. the shader is translucent or the shaderpack
- * has no compatible block program), {@code null} is stored and the caller
- * falls back to the original Veil shader.
+ * has no compatible block program), no entry is stored and the caller falls
+ * back to the original Veil shader.
  */
 public class IrisVeilShaderCache {
 
     private static final ConcurrentMap<String, ShaderInstance> CACHE = new ConcurrentHashMap<>();
+    private static final Set<String> FAILED_LEVITITE = ConcurrentHashMap.newKeySet();
     private static final ConcurrentMap<String, IrisVeilProgramLinker.Params> PARAM_CACHE = new ConcurrentHashMap<>();
     /** Cache of Veil-processed vertex shader source (populated by MixinDirectShaderCompiler). */
     private static final ConcurrentMap<ResourceLocation, String> PROCESSED_VERTEX_SOURCES = new ConcurrentHashMap<>();
     /** Cache of Veil-processed fragment shader source (populated by MixinDirectShaderCompiler). */
     private static final ConcurrentMap<ResourceLocation, String> PROCESSED_FRAGMENT_SOURCES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, String> PROCESSED_EXTRA_SOURCES = new ConcurrentHashMap<>();
     private static final IrisVeilProgramLinker LINKER = new IrisVeilProgramLinker();
 
     /** Monotonically increasing counter; incremented on shaderpack reload. */
     private static volatile int shaderPackGeneration;
+    private static Object lastActivePipeline;
 
     /**
      * Returns the current shaderpack generation number.
-     * Used by {@link IrisVeilShaderProgramShard} to detect stale cache entries.
+     * Used by the ShaderProgramShard mixin to detect stale cache entries.
      */
     public static int getShaderPackGeneration() {
+        Object current = net.irisshaders.iris.Iris.getPipelineManager().getPipelineNullable();
+        if (current != lastActivePipeline) {
+            lastActivePipeline = current;
+            shaderPackGeneration++;
+            PARAM_CACHE.clear();
+            FAILED_LEVITITE.clear();
+        }
         return shaderPackGeneration;
     }
 
@@ -73,6 +86,11 @@ public class IrisVeilShaderCache {
         // writes to the shadow map FBO rather than the gbuffer.
         if (RenderStateManager.isRenderingShadow()) {
             return getOrCreate(shaderPath, ProgramId.Shadow, false);
+        }
+
+        if (LevititeGbufferBridge.matches(shaderPath)) {
+            return getOrCreate(shaderPath,
+                LevititeRenderContext.isGhostPass() ? ProgramId.EntitiesTrans : ProgramId.Block, false);
         }
 
         String paramsKey = shaderPackFingerprint() + ":" + shaderPath + ":params";
@@ -124,11 +142,17 @@ public class IrisVeilShaderCache {
         }
 
         String key = shaderPackFingerprint() + ":" + shaderPath + ":" + programId + ":" + (useDithering ? "dither" : "nodither");
+        boolean levitite = LevititeGbufferBridge.matches(shaderPath);
+        if (levitite) {
+            LevititeGbufferBridge.noteNativeProgram(veilProgram::getProgram);
+            if (FAILED_LEVITITE.contains(key)) return null;
+        }
         return CACHE.computeIfAbsent(key, k -> {
             ShaderInstance created = LINKER.create(shaderPath, veilProgram, programId, useDithering);
             if (created != null) {
                 IrisVeilCompat.LOGGER.debug("IrisVeilShaderCache: cached Iris shader for '{}'", shaderPath);
             }
+            if (created == null && levitite) FAILED_LEVITITE.add(key);
             return created; // may be null → fallback to Veil
         });
     }
@@ -139,9 +163,23 @@ public class IrisVeilShaderCache {
      */
     public static void onShaderPackReload() {
         shaderPackGeneration++;
+        FAILED_LEVITITE.clear();
         PARAM_CACHE.clear();
         // Old entries will be superseded by new fingerprint on next getOrCreate().
         IrisVeilCompat.LOGGER.debug("IrisVeilShaderCache: shaderpack reloaded (gen {})", shaderPackGeneration);
+    }
+
+    /**
+     * Drops every reference to a shader that Iris is closing without closing it again.
+     * Identity comparison prevents a reused OpenGL program ID from evicting another instance.
+     */
+    public static void forgetClosedShader(ShaderInstance shader) {
+        if (CACHE.entrySet().removeIf(entry -> entry.getValue() == shader)) {
+            // Shards also retain a fast-path reference; make them look up a live shader next time.
+            shaderPackGeneration++;
+            PARAM_CACHE.clear();
+            FAILED_LEVITITE.clear();
+        }
     }
 
     /**
@@ -178,20 +216,27 @@ public class IrisVeilShaderCache {
         return PROCESSED_FRAGMENT_SOURCES.get(shaderId);
     }
 
+    public static void storeProcessedExtraSource(int type, ResourceLocation shaderId, String sourceCode) {
+        PROCESSED_EXTRA_SOURCES.put(type + ":" + shaderId, sourceCode);
+    }
+
+    public static String getProcessedExtraSource(int type, ResourceLocation shaderId) {
+        return PROCESSED_EXTRA_SOURCES.get(type + ":" + shaderId);
+    }
+
     /**
-     * Clears all cached entries and resets the generation counter.
+     * Clears cache references and processed sources. Iris remains responsible for closing
+     * its shader instances, which are also registered in the pipeline's loaded-shader set.
      */
     public static void clear() {
-        CACHE.values().forEach(s -> {
-            try { s.close(); } catch (Exception e) {
-                IrisVeilCompat.LOGGER.debug("IrisVeilShaderCache: error closing shader: {}", e.getMessage());
-            }
-        });
+        CACHE.values().forEach(LevititeGbufferBridge::remove);
         CACHE.clear();
+        FAILED_LEVITITE.clear();
         PARAM_CACHE.clear();
         PROCESSED_VERTEX_SOURCES.clear();
         PROCESSED_FRAGMENT_SOURCES.clear();
-        shaderPackGeneration = 0;
+        PROCESSED_EXTRA_SOURCES.clear();
+        shaderPackGeneration++;
     }
 
     private static ShaderProgram getVeilProgram(ResourceLocation shaderPath) {
@@ -206,6 +251,6 @@ public class IrisVeilShaderCache {
 
     private static String shaderPackFingerprint() {
         // Combine generation counter with a hint of the active shaderpack
-        return "gen" + shaderPackGeneration;
+        return "gen" + getShaderPackGeneration();
     }
 }

@@ -12,6 +12,8 @@ import top.leonx.irisveil.compat.veil.IrisVeilShaderCache;
 
 import static org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER;
 import static org.lwjgl.opengl.GL20C.GL_VERTEX_SHADER;
+import static org.lwjgl.opengl.GL40C.GL_TESS_CONTROL_SHADER;
+import static org.lwjgl.opengl.GL40C.GL_TESS_EVALUATION_SHADER;
 
 /**
  * Intercepts Veil's internal shader compilation to capture processed vertex shader source.
@@ -23,7 +25,8 @@ public class MixinDirectShaderCompiler {
             at = @At("HEAD"))
     private void irisveil$captureVertexSource(int type, VeilShaderSource source,
                                              CallbackInfoReturnable<CompiledShader> cir) {
-        if (type != GL_VERTEX_SHADER && type != GL_FRAGMENT_SHADER) return;
+        if (type != GL_VERTEX_SHADER && type != GL_FRAGMENT_SHADER
+            && type != GL_TESS_CONTROL_SHADER && type != GL_TESS_EVALUATION_SHADER) return;
         if (source.sourceId() == null) return;
         if (source.sourceCode() == null || source.sourceCode().isEmpty()) return;
 
@@ -34,10 +37,12 @@ public class MixinDirectShaderCompiler {
             IrisVeilCompat.LOGGER.info("[VeilHook] Captured vertex source for '{}': {} chars, hasGetVelocity={}, hasOffset={}",
                 source.sourceId(), src.length(), hasGetVelocity, hasOffset);
             IrisVeilShaderCache.storeProcessedVertexSource(source.sourceId(), source.sourceCode());
-        } else {
+        } else if (type == GL_FRAGMENT_SHADER) {
             IrisVeilCompat.LOGGER.info("[VeilHook] Captured fragment source for '{}': {} chars",
                 source.sourceId(), src.length());
             IrisVeilShaderCache.storeProcessedFragmentSource(source.sourceId(), source.sourceCode());
+        } else {
+            IrisVeilShaderCache.storeProcessedExtraSource(type, source.sourceId(), source.sourceCode());
         }
     }
 }

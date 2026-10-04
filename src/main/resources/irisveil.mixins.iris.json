@@ -4,14 +4,16 @@
   "package": "top.leonx.irisveil.mixin.iris",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "MixinFinalPassRenderer",
     "MixinGameRendererAccessor",
     "MixinIrisRenderingPipeline",
-    "MixinLevelRendererCompatHooks",
-    "MixinLevititeFinalPass",
+    "MixinLevititeVertexBuffer",
     "MixinProgramSource",
     "MixinProgramDirectives",
-    "MixinShadowRenderer"
+    "MixinShadowRenderer",
+    "MixinLevititeTransformPatcher",
+    "MixinLevititeUniforms",
+    "MixinLevititeSamplers",
+    "MixinLevititeShaderLifetime"
   ],
   "injectors": {
     "defaultRequire": 1

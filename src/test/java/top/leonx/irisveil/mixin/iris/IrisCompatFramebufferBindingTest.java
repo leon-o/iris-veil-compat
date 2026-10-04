@@ -1,8 +1,5 @@
 package top.leonx.irisveil.mixin.iris;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -28,11 +25,4 @@ class IrisCompatFramebufferBindingTest {
         }
     }
 
-    @Test
-    void simulatedEndSeaDoesNotUseFinalCompositeReplay() throws IOException {
-        String simulatedCompat = Files.readString(Path.of(
-            "src/main/java/top/leonx/irisveil/compat/simulated/SimulatedEndSeaCompat.java"));
-
-        assertFalse(simulatedCompat.contains("WorldRenderPhase.FINAL_COMPOSITE"), simulatedCompat);
-    }
 }

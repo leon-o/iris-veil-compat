@@ -67,20 +67,6 @@ public class IrisVeilGameTest {
         });
     }
 
-    @GameTest(templateNamespace = "irisveil")
-    public void endSeaFinalCompositeWritesToColortexZero(GameTestHelper helper) {
-        helper.succeedWhen(() -> {
-            int[] drawBuffers = SimulatedEndSeaCompat.finalCompositeDrawBuffers();
-            helper.assertTrue(drawBuffers.length == 1, "End Sea final composite should write exactly one color target");
-            helper.assertTrue(drawBuffers[0] == 0, "End Sea final composite should write Iris colortex0");
-
-            drawBuffers[0] = 3;
-            helper.assertTrue(
-                SimulatedEndSeaCompat.finalCompositeDrawBuffers()[0] == 0,
-                "End Sea final composite draw buffer list should be defensive-copied");
-        });
-    }
-
     public static class FakeExternalShadowRenderer {
         private static boolean rendering;
 
