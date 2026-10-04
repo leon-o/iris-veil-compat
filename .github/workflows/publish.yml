@@ -186,7 +186,7 @@ jobs:
           game-versions: |
             ${{ steps.version.outputs.mc_version }}
           dependencies: |
-            IrisShader(required){modrinth:iris}
+            IrisShader(required){modrinth:iris}{curseforge:irisshaders}
           fail-mode: warn
 
       # --- Publish: CurseForge ---
@@ -207,5 +207,5 @@ jobs:
           game-versions: |
             ${{ steps.version.outputs.mc_version }}
           dependencies: |
-            IrisShader(required){modrinth:iris}
+            IrisShader(required){modrinth:iris}{curseforge:irisshaders}
           fail-mode: warn
