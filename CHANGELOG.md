@@ -1,3 +1,8 @@
+### 0.4.0
+- Replaced the mod icon and added it to the README.
+- Updated the Minecraft 1.21.1 development dependencies to NeoForge 21.1.255, Veil 4.5.1, Sodium 0.8.13, Create 6.0.11-313, Ponder 1.0.87, Create: Aeronautics 1.3.2, and Sable 2.0.6.
+- Retained the latest published 1.21.1 Iris beta, stable Flywheel 1.0.6, and Iris Flywheel Compat 2.4.0.
+
 ### 0.3.0
 - Fixed End Sea rendering issues when using Iris shaderpacks.
 - Fixed Rope and Spring shadows disappearing with some shaderpacks.

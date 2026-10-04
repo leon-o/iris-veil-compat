@@ -1,3 +1,4 @@
+<p align="center"><img src="src/main/resources/logo.png" width="160" alt="Iris Veil Compat logo"></p>
 <h1 align="center">Iris Veil Compat<br>
   <a href="https://github.com/leon-o/iris-veil-compat"><img src="https://img.shields.io/github/license/leon-o/iris-veil-compat" alt="License"></a>
     <br><br>
@@ -24,6 +25,30 @@ The cache is automatically invalidated when you switch or reload shaderpacks —
 - **Sodium**
 - **Veil** 4.0.0+
 - Tested with **Create: Aeronautics** (Spring, Laser) and **Sable**
+
+## Development dependency baseline
+
+The development environment targets **Minecraft 1.21.1 / NeoForge**. Versions were checked against upstream releases and Maven metadata on **2026-10-04** and are pinned in `gradle.properties`.
+
+| Dependency | Version |
+| --- | --- |
+| NeoForge | 21.1.255 |
+| Iris | 1.8.14-beta.1+1.21.1 |
+| Sodium | 0.8.13+mc1.21.1 |
+| Veil | 4.5.1 |
+| Create | 6.0.11-313 (development build) |
+| Ponder | 1.0.87 |
+| Registrate | MC1.21-1.3.0+67 |
+| Flywheel | 1.0.6 |
+| Create: Aeronautics | 1.3.2+mc1.21.1 |
+| Sable | 2.0.6+mc1.21.1 |
+| Iris Flywheel Compat | 1.21.1+2.4.0-release |
+
+Iris remains on the latest published 1.21.1 beta, which supports Sodium 0.8. Create stays on the existing 6.0.11 development line; the latest public release is 6.0.10. Flywheel stays on the latest stable 1.0.6. Sable 2.0.6 requires Veil 4.3.2 or newer, satisfied by the explicit Veil 4.5.1 dependency. Veil and Sable remain optional integrations in this mod.
+
+Upstream references: [Iris](https://modrinth.com/mod/iris/version/KduFYu4t), [Sodium](https://modrinth.com/mod/sodium/version/uMOpc5uV), [Veil](https://github.com/FoundryMC/Veil/releases/tag/mc1.21.1-4.5.1-neoforge), [Create build metadata](https://maven.createmod.net/com/simibubi/create/create-1.21.1/6.0.11-313/create-1.21.1-6.0.11-313.pom), [Aeronautics](https://modrinth.com/mod/create-aeronautics/versions), [Sable](https://modrinth.com/mod/sable/versions).
+
+Validation for this baseline: `./gradlew build --no-daemon` passed all 60 unit tests. An isolated copy of the End test world loaded with Nostalgia 5.1, activated the native levitite render bridge, and shut down cleanly. The existing Iris Flywheel Compat missing-access-transformer warning remains in the log. Other shaderpacks and individual gameplay effects still need separate regression checks.
 
 # Credit
 This project uses [glsl-transformer](https://github.com/IrisShaders/glsl-transformer) for shader AST manipulation.
