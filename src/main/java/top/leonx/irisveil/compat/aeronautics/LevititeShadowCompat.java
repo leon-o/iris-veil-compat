@@ -5,9 +5,11 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.neoforged.fml.ModList;
 
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11C;
+import org.lwjgl.opengl.GL20C;
 import org.lwjgl.opengl.GL30C;
 
 import top.leonx.irisveil.IrisVeilCompat;
@@ -53,6 +55,7 @@ public final class LevititeShadowCompat {
                 int drawFramebuffer = GL11C.glGetInteger(GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
                 int readFramebuffer = GL11C.glGetInteger(GL30C.GL_READ_FRAMEBUFFER_BINDING);
                 boolean cull = GL11C.glIsEnabled(GL11C.GL_CULL_FACE);
+                int program = GL11C.glGetInteger(GL20C.GL_CURRENT_PROGRAM);
                 try (var ignored = LevititeRenderContext.enterLayer(name)) {
                     // The renderer uploads these shadow matrices before each
                     // section draw, then Sable applies its sublevel transform.
@@ -67,6 +70,8 @@ public final class LevititeShadowCompat {
                     // depth-copy boundary with exactly the targets it owned.
                     GL30C.glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
                     GL30C.glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, readFramebuffer);
+                    // The levitite program would otherwise stay bound for Iris' next shadow draws.
+                    GlStateManager._glUseProgram(program); // Fix water shadowmap being broken yay
                     if (cull) {
                         RenderSystem.enableCull();
                     } else {
